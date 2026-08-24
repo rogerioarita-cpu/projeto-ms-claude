@@ -1,0 +1,226 @@
+// Schema Prisma — Projeto MS (Fase 2)
+// Reflete o modelo de dados descrito no PRD (seção 4).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------
+// AUTENTICAÇÃO (NextAuth — modelo padrão adaptado)
+// ---------------------------------------------------------------------
+
+enum AppRole {
+  admin
+  gestor
+  analista_fiscal
+  juridico
+  comercial
+  cliente
+  auditor
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String? // login por e-mail/senha
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  roles     UserRole[]
+  accounts  Account[]
+  sessions  Session[]
+  leadsOwned Lead[]        @relation("LeadOwner")
+  documents  Document[]    @relation("DocumentUploadedBy")
+
+  @@map("users")
+}
+
+model UserRole {
+  id     String  @id @default(cuid())
+  userId String
+  role   AppRole
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@map("user_roles")
+}
+
+// Modelos padrão exigidos pelo @next-auth/prisma-adapter
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ---------------------------------------------------------------------
+// DOMÍNIO DO PRODUTO
+// ---------------------------------------------------------------------
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  cnpj      String?
+  segment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@map("clients")
+}
+
+enum LeadStage {
+  prospeccao
+  qualificacao
+  diagnostico
+  proposta
+  negociacao
+  contrato
+  onboarding
+  execucao
+  encerrado
+}
+
+model Lead {
+  id             String    @id @default(cuid())
+  companyName    String
+  contactName    String?
+  contactEmail   String?
+  stage          LeadStage @default(prospeccao)
+  estimatedValue Decimal   @default(0) @db.Decimal(14, 2)
+  ownerId        String?
+  owner          User?     @relation("LeadOwner", fields: [ownerId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("leads")
+}
+
+enum ProjectStatus {
+  planejamento
+  importacao
+  auditoria
+  analise
+  aprovacao
+  protocolo
+  concluido
+}
+
+model Project {
+  id                String        @id @default(cuid())
+  clientId          String?
+  client            Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name              String
+  status            ProjectStatus @default(planejamento)
+  periodStart       DateTime?
+  periodEnd         DateTime?
+  prescriptionDate  DateTime? // controle de prescrição (5 anos)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  documents        Document[]
+  inconsistencies  Inconsistency[]
+  taxCredits       TaxCredit[]
+
+  @@map("projects")
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  projectId    String?
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name         String
+  docType      String?
+  version      Int      @default(1)
+  storagePath  String?
+  uploadedById String?
+  uploadedBy   User?    @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@map("documents")
+}
+
+enum Severity {
+  baixa
+  media
+  alta
+  critica
+}
+
+model Inconsistency {
+  id          String   @id @default(cuid())
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  code        String
+  description String
+  severity    Severity @default(media)
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@map("inconsistencies")
+}
+
+enum CreditStatus {
+  identificado
+  em_analise
+  aprovado
+  protocolado
+  recuperado
+  rejeitado
+}
+
+model TaxCredit {
+  id          String       @id @default(cuid())
+  projectId   String?
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taxType     String
+  thesis      String?
+  amount      Decimal      @default(0) @db.Decimal(14, 2)
+  status      CreditStatus @default(identificado)
+  competence  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("tax_credits")
+}
