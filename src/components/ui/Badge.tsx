@@ -18,6 +18,13 @@ const COLORS: Record<string, string> = {
   aprovacao: "bg-purple-100 text-purple-800",
   protocolo: "bg-indigo-100 text-indigo-800",
   concluido: "bg-green-100 text-green-800",
+
+  sucesso: "bg-green-100 text-green-800",
+  aviso: "bg-yellow-100 text-yellow-800",
+  erro: "bg-red-100 text-red-800",
+
+  efd_icms_ipi: "bg-blue-100 text-blue-800",
+  efd_contribuicoes: "bg-purple-100 text-purple-800",
 };
 
 const LABELS: Record<string, string> = {
@@ -38,6 +45,13 @@ const LABELS: Record<string, string> = {
   aprovacao: "Aprovação",
   protocolo: "Protocolo",
   concluido: "Concluído",
+
+  sucesso: "Processado com sucesso",
+  aviso: "Processado com avisos",
+  erro: "Erro no processamento",
+
+  efd_icms_ipi: "EFD ICMS/IPI",
+  efd_contribuicoes: "EFD Contribuições",
 };
 
 export function Badge({ value }: { value: string }) {

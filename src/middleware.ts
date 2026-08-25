@@ -9,6 +9,7 @@ export const config = {
     "/clientes/:path*",
     "/projetos/:path*",
     "/leads/:path*",
+    "/importacao/:path*",
     "/auditoria/:path*",
     "/creditos/:path*",
     "/workflow/:path*",
@@ -17,6 +18,7 @@ export const config = {
 
     "/api/clientes/:path*",
     "/api/projetos/:path*",
+    "/api/sped/:path*",
     "/api/auditoria/:path*",
     "/api/documentos/:path*",
     "/api/users/:path*",

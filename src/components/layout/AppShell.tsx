@@ -6,6 +6,7 @@ const NAV = [
   { href: "/clientes", label: "Clientes" },
   { href: "/projetos", label: "Projetos" },
   { href: "/leads", label: "Pipeline de leads" },
+  { href: "/importacao", label: "Importação SPED" },
   { href: "/auditoria", label: "Auditoria SPED" },
   { href: "/creditos", label: "Recuperação de créditos" },
   { href: "/workflow", label: "Workflow tributário" },

@@ -39,6 +39,7 @@ model User {
   sessions  Session[]
   leadsOwned Lead[]        @relation("LeadOwner")
   documents  Document[]    @relation("DocumentUploadedBy")
+  spedFiles  SpedFile[]    @relation("SpedFileUploadedBy")
 
   @@map("users")
 }
@@ -162,6 +163,7 @@ model Project {
   documents        Document[]
   inconsistencies  Inconsistency[]
   taxCredits       TaxCredit[]
+  spedFiles        SpedFile[]
 
   @@map("projects")
 }
@@ -223,4 +225,59 @@ model TaxCredit {
   updatedAt   DateTime     @updatedAt
 
   @@map("tax_credits")
+}
+
+// ---------------------------------------------------------------------
+// IMPORTAÇÃO E CONTROLE DE ARQUIVOS SPED (PRD seções 6.5 / 6.6 / 8.3)
+// ---------------------------------------------------------------------
+
+enum SpedFileType {
+  efd_icms_ipi
+  efd_contribuicoes
+
+  @@map("sped_file_type")
+}
+
+enum SpedFileStatus {
+  sucesso
+  aviso
+  erro
+
+  @@map("sped_file_status")
+}
+
+model SpedFile {
+  id        String       @id @default(cuid())
+  projectId String?
+  project   Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type      SpedFileType
+  status    SpedFileStatus @default(sucesso)
+
+  // Arquivo
+  fileName    String
+  fileSizeKb  Int      @default(0)
+
+  // Identificação do contribuinte (registro 0000)
+  companyName    String?
+  cnpj           String?
+  ie             String?
+  uf             String?
+  periodStart    String? // YYYY-MM
+  periodEnd      String? // YYYY-MM
+
+  // Totais de processamento (para KPIs)
+  totalRecords   Int @default(0)
+  warningsCount  Int @default(0)
+  errorsCount    Int @default(0)
+
+  // Dados extraídos estruturados (apuração ICMS, PIS/COFINS, NFs, ajustes, avisos e erros)
+  extracted Json?
+
+  uploadedById String?
+  uploadedBy   User?    @relation("SpedFileUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@index([projectId])
+  @@index([type])
+  @@map("sped_files")
 }
