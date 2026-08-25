@@ -10,6 +10,7 @@ const NAV = [
   { href: "/creditos", label: "Recuperação de créditos" },
   { href: "/workflow", label: "Workflow tributário" },
   { href: "/documentos", label: "Gestão documental" },
+  { href: "/usuarios", label: "Cadastro de usuários" },
 ];
 
 export function AppShell({
