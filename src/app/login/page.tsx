@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
@@ -24,7 +24,7 @@ export default function LoginPage() {
 
     setLoading(false);
     if (res?.error) {
-      setError("E-mail ou senha inválidos.");
+      setError("E-mail ou senha invÃ¡lidos.");
       return;
     }
     router.push("/dashboard");
@@ -35,7 +35,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-lg border border-border bg-white p-8 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-wide text-gold">Projeto MS</p>
         <h1 className="mt-1 text-xl font-bold text-navy">Entrar na plataforma</h1>
-        <p className="mt-1 text-sm text-muted">Auditoria fiscal SPED e recuperação de créditos.</p>
+        <p className="mt-1 text-sm text-muted">Auditoria fiscal SPED e recuperaÃ§Ã£o de crÃ©ditos.</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
@@ -57,7 +57,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-navy"
-              placeholder="••••••••"
+              placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
             />
           </div>
 
@@ -80,7 +80,7 @@ export default function LoginPage() {
         </button>
 
         <p className="mt-6 text-center text-xs text-muted">
-          Demo: admin@projeto-ms.local / trocar-esta-senha
+          Demo: admin@projeto-ms.local / Admin@123456
         </p>
       </div>
     </main>
