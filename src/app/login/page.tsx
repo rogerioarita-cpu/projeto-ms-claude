@@ -24,7 +24,7 @@ export default function LoginPage() {
 
     setLoading(false);
     if (res?.error) {
-      setError("E-mail ou senha invÃ¡lidos.");
+      setError("E-mail ou senha inválidos.");
       return;
     }
     router.push("/dashboard");
@@ -35,7 +35,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-lg border border-border bg-white p-8 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-wide text-gold">Projeto MS</p>
         <h1 className="mt-1 text-xl font-bold text-navy">Entrar na plataforma</h1>
-        <p className="mt-1 text-sm text-muted">Auditoria fiscal SPED e recuperaÃ§Ã£o de crÃ©ditos.</p>
+        <p className="mt-1 text-sm text-muted">Auditoria fiscal SPED e recuperação de créditos.</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
@@ -86,3 +86,6 @@ export default function LoginPage() {
     </main>
   );
 }
+
+
+
