@@ -25,6 +25,45 @@ const COLORS: Record<string, string> = {
 
   efd_icms_ipi: "bg-blue-100 text-blue-800",
   efd_contribuicoes: "bg-purple-100 text-purple-800",
+
+  novo: "bg-gray-100 text-gray-700",
+  qualificacao: "bg-yellow-100 text-yellow-800",
+  reuniao_agendada: "bg-blue-100 text-blue-800",
+  documentacao: "bg-yellow-100 text-yellow-800",
+  analise_fiscal: "bg-orange-100 text-orange-800",
+  proposta: "bg-indigo-100 text-indigo-800",
+  contrato: "bg-purple-100 text-purple-800",
+  cancelado: "bg-red-100 text-red-800",
+  // "aprovado" já mapeado acima (CreditStatus).
+
+  industria: "bg-slate-100 text-slate-700",
+  comercio: "bg-teal-100 text-teal-800",
+  revenda: "bg-cyan-100 text-cyan-800",
+  servicos: "bg-violet-100 text-violet-800",
+
+  procuracao: "bg-blue-100 text-blue-800",
+  nda: "bg-purple-100 text-purple-800",
+  aditivo: "bg-indigo-100 text-indigo-800",
+  outro: "bg-gray-100 text-gray-700",
+
+  enviado: "bg-blue-100 text-blue-800",
+  validado: "bg-green-100 text-green-800",
+  pendente: "bg-yellow-100 text-yellow-800",
+  // "rejeitado" já mapeado acima (CreditStatus).
+
+  em_andamento: "bg-yellow-100 text-yellow-800",
+  concluida: "bg-blue-100 text-blue-800",
+  aprovada: "bg-green-100 text-green-800",
+  rejeitada: "bg-red-100 text-red-800",
+
+  juridico: "bg-indigo-100 text-indigo-800",
+  financeiro: "bg-teal-100 text-teal-800",
+  comercial: "bg-cyan-100 text-cyan-800",
+  concorrencia: "bg-violet-100 text-violet-800",
+
+  ativo: "bg-green-100 text-green-800",
+  inativo: "bg-gray-100 text-gray-700",
+  bloqueado: "bg-red-100 text-red-800",
 };
 
 const LABELS: Record<string, string> = {
@@ -52,6 +91,43 @@ const LABELS: Record<string, string> = {
 
   efd_icms_ipi: "EFD ICMS/IPI",
   efd_contribuicoes: "EFD Contribuições",
+
+  novo: "Novo",
+  qualificacao: "Qualificação",
+  reuniao_agendada: "Reunião agendada",
+  documentacao: "Documentação",
+  analise_fiscal: "Análise fiscal",
+  proposta: "Proposta",
+  contrato: "Contrato",
+  cancelado: "Cancelado",
+
+  industria: "Indústria",
+  comercio: "Comércio",
+  revenda: "Revenda",
+  servicos: "Serviços",
+
+  procuracao: "Procuração",
+  nda: "NDA",
+  aditivo: "Aditivo",
+  outro: "Outros",
+
+  enviado: "Enviado",
+  validado: "Validado",
+
+  em_andamento: "Em andamento",
+  concluida: "Concluída",
+  aprovada: "Aprovada",
+  rejeitada: "Rejeitada",
+
+  pendente: "Pendente",
+  juridico: "Jurídico",
+  financeiro: "Financeiro",
+  comercial: "Comercial",
+  concorrencia: "Concorrência",
+
+  ativo: "Ativo",
+  inativo: "Inativo",
+  bloqueado: "Bloqueado",
 };
 
 export function Badge({ value }: { value: string }) {

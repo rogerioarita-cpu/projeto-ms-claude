@@ -3,22 +3,17 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/server/require-admin";
+import { ROLE_VALUES } from "@/lib/role-options";
 
-const ROLE_VALUES = [
-  "admin",
-  "gestor",
-  "analista_fiscal",
-  "juridico",
-  "comercial",
-  "cliente",
-  "auditor",
-] as const;
+const STATUS_VALUES = ["ativo", "inativo", "bloqueado"] as const;
 
 const updateUserSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("E-mail inválido"),
   password: z.string().min(8).optional().or(z.literal("")),
   roles: z.array(z.enum(ROLE_VALUES)).min(1, "Selecione ao menos um papel"),
+  status: z.enum(STATUS_VALUES).optional(),
+  linkedLeadId: z.string().nullable().optional(),
 });
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
@@ -28,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 
     const user = await prisma.user.findUnique({
       where: { id: params.id },
-      include: { roles: true },
+      include: { roles: true, linkedLead: true },
     });
     if (!user) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
 
@@ -36,6 +31,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       id: user.id,
       name: user.name,
       email: user.email,
+      status: user.status,
+      lastAccessAt: user.lastAccessAt,
+      linkedLeadId: user.linkedLeadId,
       roles: user.roles.map((r) => r.role),
     });
   } catch (error) {
@@ -55,7 +53,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       const firstError = Object.values(parsed.error.flatten().fieldErrors)[0]?.[0];
       return NextResponse.json({ error: firstError ?? "Dados inválidos." }, { status: 400 });
     }
-    const { name, email, password, roles } = parsed.data;
+    const { name, email, password, roles, status, linkedLeadId } = parsed.data;
+
+    if (roles.includes("cliente_consulta") && !linkedLeadId) {
+      return NextResponse.json({ error: "Selecione a empresa vinculada para o perfil Cliente-Consulta." }, { status: 400 });
+    }
 
     const target = await prisma.user.findUnique({ where: { id: params.id } });
     if (!target) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
@@ -65,13 +67,15 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: "Esse e-mail já está em uso por outro usuário." }, { status: 409 });
     }
 
-    // Impede o admin de remover o próprio papel de admin (evita se auto-bloquear).
+    // Impede o admin de remover o próprio papel de admin, se bloquear ou desativar a si mesmo.
     const currentUserId = (session.user as { id?: string }).id;
-    if (currentUserId === params.id && !roles.includes("admin")) {
-      return NextResponse.json(
-        { error: "Você não pode remover seu próprio papel de admin." },
-        { status: 400 }
-      );
+    if (currentUserId === params.id) {
+      if (!roles.includes("admin")) {
+        return NextResponse.json({ error: "Você não pode remover seu próprio papel de admin." }, { status: 400 });
+      }
+      if (status && status !== "ativo") {
+        return NextResponse.json({ error: "Você não pode bloquear ou desativar seu próprio usuário." }, { status: 400 });
+      }
     }
 
     await prisma.$transaction(async (tx) => {
@@ -80,6 +84,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         data: {
           name,
           email,
+          status: status ?? target.status,
+          linkedLeadId: linkedLeadId || null,
           ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
         },
       });

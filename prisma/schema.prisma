@@ -20,19 +20,31 @@ enum AppRole {
   analista_fiscal
   juridico
   comercial
-  cliente
-  auditor
+  aprovador
+  cliente_consulta
+}
+
+enum UserStatus {
+  ativo
+  inativo
+  bloqueado
+
+  @@map("user_status")
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String     @id @default(cuid())
   name          String?
-  email         String    @unique
+  email         String     @unique
   emailVerified DateTime?
   image         String?
   passwordHash  String? // login por e-mail/senha
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  status        UserStatus @default(ativo)
+  lastAccessAt  DateTime? // "último acesso" (PRD 6.10)
+  linkedLeadId  String? // empresa vinculada — obrigatório para o perfil cliente_consulta
+  linkedLead    Lead?      @relation("ClientUsers", fields: [linkedLeadId], references: [id], onDelete: SetNull)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   roles     UserRole[]
   accounts  Account[]
@@ -40,6 +52,7 @@ model User {
   leadsOwned Lead[]        @relation("LeadOwner")
   documents  Document[]    @relation("DocumentUploadedBy")
   spedFiles  SpedFile[]    @relation("SpedFileUploadedBy")
+  analises   AnaliseFiscal[] @relation("AnaliseAnalyst")
 
   @@map("users")
 }
@@ -111,29 +124,54 @@ model Client {
   @@map("clients")
 }
 
-enum LeadStage {
-  prospeccao
+// LeadStatus e CompanyType (ver adiante) alinhados ao PRD seção 6.3/7.1 —
+// substituem o antigo enum LeadStage do MVP inicial.
+
+enum CompanyType {
+  industria
+  comercio
+  revenda
+  servicos
+
+  @@map("company_type")
+}
+
+enum LeadStatus {
+  novo
   qualificacao
-  diagnostico
+  reuniao_agendada
+  documentacao
+  analise_fiscal
   proposta
-  negociacao
   contrato
-  onboarding
-  execucao
-  encerrado
+  aprovado
+  cancelado
+
+  @@map("lead_status")
 }
 
 model Lead {
-  id             String    @id @default(cuid())
+  id             String      @id @default(cuid())
   companyName    String
+  cnpj           String?
+  companyType    CompanyType?
   contactName    String?
   contactEmail   String?
-  stage          LeadStage @default(prospeccao)
-  estimatedValue Decimal   @default(0) @db.Decimal(14, 2)
+  phone          String?
+  status         LeadStatus  @default(novo)
+  estimatedValue Decimal     @default(0) @db.Decimal(14, 2)
+  procurationSigned Boolean  @default(false)
+  ndaSigned         Boolean  @default(false)
+  notes          String?
   ownerId        String?
-  owner          User?     @relation("LeadOwner", fields: [ownerId], references: [id])
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  owner          User?       @relation("LeadOwner", fields: [ownerId], references: [id])
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  clientUsers User[]          @relation("ClientUsers")
+  documents   Document[]
+  analises    AnaliseFiscal[]
+  approvals   Aprovacao[]
 
   @@map("leads")
 }
@@ -160,7 +198,7 @@ model Project {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  documents        Document[]
+  documents        Document[]  // legado: FK antiga (ver nota no model Document) — mantido só por compat de include já em uso
   inconsistencies  Inconsistency[]
   taxCredits       TaxCredit[]
   spedFiles        SpedFile[]
@@ -168,18 +206,45 @@ model Project {
   @@map("projects")
 }
 
-model Document {
-  id           String   @id @default(cuid())
-  projectId    String?
-  project      Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name         String
-  docType      String?
-  version      Int      @default(1)
-  storagePath  String?
-  uploadedById String?
-  uploadedBy   User?    @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
-  createdAt    DateTime @default(now())
+enum DocType {
+  procuracao
+  nda
+  contrato
+  aditivo
+  outro
 
+  @@map("doc_type")
+}
+
+enum DocStatus {
+  enviado
+  pendente
+  validado
+  rejeitado
+
+  @@map("doc_status")
+}
+
+model Document {
+  id           String    @id @default(cuid())
+  leadId       String?
+  lead         Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  // Campo legado do MVP inicial (documentos vinculados a Projeto). Mantido apenas
+  // para não quebrar dados já existentes; o cadastro atual (PRD 6.4) usa `leadId`.
+  projectId    String?
+  project      Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name         String
+  type         DocType   @default(outro)
+  version      Int       @default(1)
+  status       DocStatus @default(enviado)
+  sizeKb       Int       @default(0)
+  storagePath  String?
+  note         String?
+  uploadedById String?
+  uploadedBy   User?     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  createdAt    DateTime  @default(now())
+
+  @@index([leadId])
   @@map("documents")
 }
 
@@ -280,4 +345,101 @@ model SpedFile {
   @@index([projectId])
   @@index([type])
   @@map("sped_files")
+}
+
+// ---------------------------------------------------------------------
+// ANÁLISE FISCAL (PRD 6.7 / 7.2)
+// ---------------------------------------------------------------------
+
+enum TaxType {
+  pis_cofins
+  icms
+  ipi
+  irpj_csll
+  outros
+
+  @@map("tax_type")
+}
+
+enum AnaliseStatus {
+  em_andamento
+  concluida
+  aprovada
+  rejeitada
+
+  @@map("analise_status")
+}
+
+model AnaliseFiscal {
+  id              String        @id @default(cuid())
+  leadId          String
+  lead            Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  taxType         TaxType
+  thesis          String
+  periodStart     String // YYYY-MM
+  periodEnd       String // YYYY-MM
+  estimatedCredit Decimal       @default(0) @db.Decimal(14, 2)
+  status          AnaliseStatus @default(em_andamento)
+  diagnosis       String?
+  analystId       String?
+  analyst         User?         @relation("AnaliseAnalyst", fields: [analystId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  checklist ChecklistItem[]
+  approvals Aprovacao[]
+
+  @@index([leadId])
+  @@map("analises_fiscais")
+}
+
+model ChecklistItem {
+  id          String        @id @default(cuid())
+  analiseId   String
+  analise     AnaliseFiscal @relation(fields: [analiseId], references: [id], onDelete: Cascade)
+  description String
+  done        Boolean       @default(false)
+  order       Int           @default(0)
+
+  @@index([analiseId])
+  @@map("checklist_items")
+}
+
+// ---------------------------------------------------------------------
+// APROVAÇÕES MULTIDISCIPLINARES (PRD 6.9 / 7.4)
+// ---------------------------------------------------------------------
+
+enum ApprovalArea {
+  juridico
+  financeiro
+  comercial
+  concorrencia
+
+  @@map("approval_area")
+}
+
+enum ApprovalStatus {
+  pendente
+  aprovado
+  rejeitado
+
+  @@map("approval_status")
+}
+
+model Aprovacao {
+  id         String         @id @default(cuid())
+  leadId     String
+  lead       Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  analiseId  String
+  analise    AnaliseFiscal  @relation(fields: [analiseId], references: [id], onDelete: Cascade)
+  area       ApprovalArea
+  status     ApprovalStatus @default(pendente)
+  decidedBy  String?
+  decidedAt  DateTime?
+  note       String? // obrigatória em caso de rejeição (validado na aplicação)
+  createdAt  DateTime       @default(now())
+
+  @@unique([analiseId, area])
+  @@index([leadId])
+  @@map("aprovacoes")
 }

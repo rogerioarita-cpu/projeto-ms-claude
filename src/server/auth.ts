@@ -23,16 +23,24 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
           include: { roles: true },
         });
-        if (!user?.passwordHash) return null;
+        // Mensagens de erro específicas (lidas pela tela de login via `result.error`)
+        // para suportar o fluxo de primeiro acesso e os estados ativo/inativo/bloqueado (PRD 6.1/6.10).
+        if (!user) throw new Error("invalido");
+        if (user.status === "bloqueado") throw new Error("bloqueado");
+        if (user.status === "inativo") throw new Error("inativo");
+        if (!user.passwordHash) throw new Error("sem_senha");
 
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
-        if (!valid) return null;
+        if (!valid) throw new Error("invalido");
+
+        await prisma.user.update({ where: { id: user.id }, data: { lastAccessAt: new Date() } });
 
         return {
           id: user.id,
           name: user.name,
           email: user.email,
           roles: user.roles.map((r) => r.role),
+          linkedLeadId: user.linkedLeadId,
         };
       },
     }),
@@ -50,8 +58,10 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        // @ts-expect-error -- roles é adicionado no authorize()
+        // @ts-expect-error -- roles/linkedLeadId são adicionados no authorize()
         token.roles = user.roles ?? [];
+        // @ts-expect-error -- idem
+        token.linkedLeadId = user.linkedLeadId ?? null;
       }
       return token;
     },
@@ -59,19 +69,21 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as { id?: string }).id = token.id as string;
         (session.user as { roles?: string[] }).roles = (token.roles as string[]) ?? [];
+        (session.user as { linkedLeadId?: string | null }).linkedLeadId = (token.linkedLeadId as string | null) ?? null;
       }
       return session;
     },
   },
   events: {
     // Equivalente ao trigger handle_new_user() do Supabase:
-    // ao logar pela primeira vez via OAuth, cria o papel padrão 'cliente'.
+    // ao logar pela primeira vez via OAuth, cria o papel padrão 'cliente_consulta'.
     async signIn({ user }) {
       if (!user.id) return;
       const existing = await prisma.userRole.findFirst({ where: { userId: user.id } });
       if (!existing) {
-        await prisma.userRole.create({ data: { userId: user.id, role: "cliente" } });
+        await prisma.userRole.create({ data: { userId: user.id, role: "cliente_consulta" } });
       }
+      await prisma.user.update({ where: { id: user.id }, data: { lastAccessAt: new Date() } });
     },
   },
 };

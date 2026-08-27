@@ -25,6 +25,8 @@ export default async function EditarUsuarioPage({ params }: { params: { id: stri
             name: user.name ?? "",
             email: user.email,
             roles: user.roles.map((r) => r.role as RoleValue),
+            status: user.status,
+            linkedLeadId: user.linkedLeadId,
           }}
         />
       </Card>

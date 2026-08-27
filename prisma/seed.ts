@@ -13,7 +13,20 @@ async function main() {
       email: "admin@projeto-ms.local",
       name: "Administrador",
       passwordHash,
+      status: "ativo",
       roles: { create: [{ role: "admin" }] },
+    },
+  });
+
+  const analista = await prisma.user.upsert({
+    where: { email: "analista@projeto-ms.local" },
+    update: {},
+    create: {
+      email: "analista@projeto-ms.local",
+      name: "Beatriz Fontoura",
+      passwordHash: await bcrypt.hash("trocar-esta-senha", 10),
+      status: "ativo",
+      roles: { create: [{ role: "analista_fiscal" }] },
     },
   });
 
@@ -60,13 +73,28 @@ async function main() {
 
   await prisma.lead.createMany({
     data: [
-      { companyName: "Metalúrgica Sul", contactName: "Carla Menezes", contactEmail: "carla@metalsul.com.br", stage: "prospeccao", estimatedValue: 180000 },
-      { companyName: "Rede Farma Plus", contactName: "João Ribeiro", contactEmail: "joao@farmaplus.com.br", stage: "qualificacao", estimatedValue: 320000 },
-      { companyName: "AgroCampo Cooperativa", contactName: "Marina Alves", contactEmail: "marina@agrocampo.coop", stage: "diagnostico", estimatedValue: 540000 },
-      { companyName: "Transportes Ipê", contactName: "Rui Santos", contactEmail: "rui@ipelog.com.br", stage: "proposta", estimatedValue: 260000 },
-      { companyName: "Construtora Horizonte", contactName: "Ana Paula Dias", contactEmail: "ana@horizonte.eng.br", stage: "negociacao", estimatedValue: 410000 },
-      { companyName: "Supermercados Bela Vista", contactName: "Tiago Lopes", contactEmail: "tiago@belavista.com.br", stage: "contrato", estimatedValue: 150000 },
+      { companyName: "Metalúrgica Sul", cnpj: "11.222.333/0001-44", companyType: "industria", contactName: "Carla Menezes", contactEmail: "carla@metalsul.com.br", phone: "(11) 98888-1234", status: "novo", estimatedValue: 180000, procurationSigned: false, ndaSigned: false },
+      { companyName: "Rede Farma Plus", cnpj: "22.333.444/0001-55", companyType: "comercio", contactName: "João Ribeiro", contactEmail: "joao@farmaplus.com.br", phone: "(11) 97777-2345", status: "qualificacao", estimatedValue: 320000, procurationSigned: true, ndaSigned: false },
+      { companyName: "AgroCampo Cooperativa", cnpj: "33.444.555/0001-66", companyType: "revenda", contactName: "Marina Alves", contactEmail: "marina@agrocampo.coop", phone: "(19) 96666-3456", status: "analise_fiscal", estimatedValue: 540000, procurationSigned: true, ndaSigned: true },
+      { companyName: "Transportes Ipê", cnpj: "44.555.666/0001-77", companyType: "servicos", contactName: "Rui Santos", contactEmail: "rui@ipelog.com.br", phone: "(41) 95555-4567", status: "proposta", estimatedValue: 260000, procurationSigned: true, ndaSigned: true },
+      { companyName: "Construtora Horizonte", cnpj: "55.666.777/0001-88", companyType: "servicos", contactName: "Ana Paula Dias", contactEmail: "ana@horizonte.eng.br", phone: "(31) 94444-5678", status: "documentacao", estimatedValue: 410000, procurationSigned: true, ndaSigned: false },
+      { companyName: "Supermercados Bela Vista", cnpj: "66.777.888/0001-99", companyType: "comercio", contactName: "Tiago Lopes", contactEmail: "tiago@belavista.com.br", phone: "(21) 93333-6789", status: "contrato", estimatedValue: 150000, procurationSigned: true, ndaSigned: true },
     ],
+  });
+  const leads = await prisma.lead.findMany();
+  const leadByName = (name: string) => leads.find((l) => l.companyName === name)!;
+
+  // Cria um usuário de exemplo com o perfil Cliente-Consulta, vinculado a um lead.
+  await prisma.user.upsert({
+    where: { email: "cliente@agrocampo.coop" },
+    update: {},
+    create: {
+      email: "cliente@agrocampo.coop",
+      name: "Marina Alves",
+      status: "ativo",
+      linkedLeadId: leadByName("AgroCampo Cooperativa").id,
+      roles: { create: [{ role: "cliente_consulta" }] },
+    },
   });
 
   await prisma.inconsistency.createMany({
@@ -89,13 +117,65 @@ async function main() {
     ],
   });
 
+  // Documentos (PRD 6.4) — vinculados a leads, com tipo, status e versionamento.
   await prisma.document.createMany({
     data: [
-      { projectId: projAurora.id, name: "EFD_Contribuicoes_2023.txt", docType: "SPED", version: 2, uploadedById: admin.id },
-      { projectId: projAurora.id, name: "Procuracao_Aurora.pdf", docType: "Jurídico", version: 1, uploadedById: admin.id },
-      { projectId: projVale.id, name: "EFD_ICMS_IPI_2024.txt", docType: "SPED", version: 1, uploadedById: admin.id },
-      { projectId: projTecno.id, name: "Contrato_TecnoServicos.pdf", docType: "Contrato", version: 3, uploadedById: admin.id },
+      { leadId: leadByName("AgroCampo Cooperativa").id, name: "Procuracao_AgroCampo.pdf", type: "procuracao", status: "validado", version: 1, sizeKb: 220, uploadedById: admin.id },
+      { leadId: leadByName("AgroCampo Cooperativa").id, name: "NDA_AgroCampo.pdf", type: "nda", status: "validado", version: 1, sizeKb: 140, uploadedById: admin.id },
+      { leadId: leadByName("Transportes Ipê").id, name: "Procuracao_Ipe.pdf", type: "procuracao", status: "validado", version: 1, sizeKb: 190, uploadedById: admin.id },
+      { leadId: leadByName("Transportes Ipê").id, name: "NDA_Ipe.pdf", type: "nda", status: "pendente", version: 1, sizeKb: 110, uploadedById: admin.id },
+      { leadId: leadByName("Construtora Horizonte").id, name: "Procuracao_Horizonte.pdf", type: "procuracao", status: "enviado", version: 1, sizeKb: 200, uploadedById: admin.id },
     ],
+  });
+
+  // Análise fiscal (PRD 6.7) — com checklist.
+  const analiseAgro = await prisma.analiseFiscal.create({
+    data: {
+      leadId: leadByName("AgroCampo Cooperativa").id,
+      taxType: "icms",
+      thesis: "Crédito de ICMS sobre energia elétrica na atividade agroindustrial",
+      periodStart: "2021-01",
+      periodEnd: "2025-06",
+      estimatedCredit: 540000,
+      status: "concluida",
+      diagnosis: "Identificado crédito relevante em três das cinco unidades produtivas.",
+      analystId: analista.id,
+      checklist: {
+        create: [
+          { description: "Coletar EFD ICMS/IPI do período", done: true, order: 0 },
+          { description: "Validar apuração por unidade", done: true, order: 1 },
+          { description: "Calcular crédito recuperável", done: false, order: 2 },
+        ],
+      },
+    },
+  });
+  await prisma.aprovacao.createMany({
+    data: [
+      { leadId: analiseAgro.leadId, analiseId: analiseAgro.id, area: "juridico", status: "aprovado", decidedBy: "Dr. Malerba", decidedAt: new Date() },
+      { leadId: analiseAgro.leadId, analiseId: analiseAgro.id, area: "financeiro", status: "pendente" },
+      { leadId: analiseAgro.leadId, analiseId: analiseAgro.id, area: "comercial", status: "pendente" },
+      { leadId: analiseAgro.leadId, analiseId: analiseAgro.id, area: "concorrencia", status: "pendente" },
+    ],
+  });
+
+  await prisma.analiseFiscal.create({
+    data: {
+      leadId: leadByName("Transportes Ipê").id,
+      taxType: "pis_cofins",
+      thesis: "Exclusão do ICMS da base de cálculo do PIS/COFINS",
+      periodStart: "2020-01",
+      periodEnd: "2025-12",
+      estimatedCredit: 260000,
+      status: "em_andamento",
+      diagnosis: null,
+      analystId: analista.id,
+      checklist: {
+        create: [
+          { description: "Coletar EFD Contribuições do período", done: false, order: 0 },
+          { description: "Levantar guias de recolhimento", done: false, order: 1 },
+        ],
+      },
+    },
   });
 
   console.log("Seed concluído. Login de demonstração: admin@projeto-ms.local / trocar-esta-senha");

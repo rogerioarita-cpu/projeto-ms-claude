@@ -1,31 +1,27 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+const DOC_STATUSES = ["enviado", "pendente", "validado", "rejeitado"] as const;
+
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  // Usado pelo accordion de documentos para revisar o status (Enviado → Pendente → Validado/Rejeitado).
   try {
     const body = await request.json();
-    const name = String(body.name ?? "").trim();
-    const docType = body.docType ? String(body.docType).trim() : null;
-    const storagePath = body.storagePath ? String(body.storagePath).trim() : null;
-    const projectId = body.projectId ? String(body.projectId) : null;
-    const version = Number(body.version ?? 1);
-    if (!name) return NextResponse.json({ error: "O nome do documento é obrigatório." }, { status: 400 });
-    if (!Number.isInteger(version) || version < 1) return NextResponse.json({ error: "A versão deve ser um número inteiro maior que zero." }, { status: 400 });
+    const status = String(body.status ?? "");
+    if (!DOC_STATUSES.includes(status as (typeof DOC_STATUSES)[number])) {
+      return NextResponse.json({ error: "Status de documento inválido." }, { status: 400 });
+    }
     const existing = await prisma.document.findUnique({ where: { id: params.id } });
     if (!existing) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
-    if (projectId) {
-      const project = await prisma.project.findUnique({ where: { id: projectId } });
-      if (!project) return NextResponse.json({ error: "Projeto não encontrado." }, { status: 400 });
-    }
     const document = await prisma.document.update({
       where: { id: params.id },
-      data: { name, docType, storagePath, version, projectId },
-      include: { project: { include: { client: true } }, uploadedBy: true },
+      data: { status: status as (typeof DOC_STATUSES)[number] },
+      include: { lead: true, uploadedBy: true },
     });
     return NextResponse.json(document);
   } catch (error) {
-    console.error("PUT /api/documentos/[id]", error);
-    return NextResponse.json({ error: "Não foi possível atualizar o documento." }, { status: 500 });
+    console.error("PATCH /api/documentos/[id]", error);
+    return NextResponse.json({ error: "Não foi possível atualizar o status do documento." }, { status: 500 });
   }
 }
 

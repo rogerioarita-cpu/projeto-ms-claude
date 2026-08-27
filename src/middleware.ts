@@ -5,6 +5,7 @@ export const config = {
   // rotas de API). NÃO inclui /api/auth/*, que precisa ficar acessível para
   // o próprio fluxo de login funcionar.
   matcher: [
+    "/inicio/:path*",
     "/dashboard/:path*",
     "/clientes/:path*",
     "/projetos/:path*",
@@ -15,6 +16,8 @@ export const config = {
     "/workflow/:path*",
     "/documentos/:path*",
     "/usuarios/:path*",
+    "/analise/:path*",
+    "/aprovacoes/:path*",
 
     "/api/clientes/:path*",
     "/api/projetos/:path*",
@@ -22,5 +25,9 @@ export const config = {
     "/api/auditoria/:path*",
     "/api/documentos/:path*",
     "/api/users/:path*",
+    "/api/leads/:path*",
+    "/api/analises/:path*",
+    "/api/aprovacoes/:path*",
+    "/api/checklist/:path*",
   ],
 };

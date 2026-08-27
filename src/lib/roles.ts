@@ -7,7 +7,7 @@ export const STAFF_ROLES: AppRole[] = [
   "analista_fiscal",
   "juridico",
   "comercial",
-  "auditor",
+  "aprovador",
 ];
 
 export function isStaff(roles: AppRole[]): boolean {
@@ -16,4 +16,9 @@ export function isStaff(roles: AppRole[]): boolean {
 
 export function hasRole(roles: AppRole[], role: AppRole): boolean {
   return roles.includes(role);
+}
+
+/** true se o usuário só enxerga dados da própria empresa (PRD: filtro automático para cliente_consulta). */
+export function isClienteConsulta(roles: AppRole[]): boolean {
+  return roles.includes("cliente_consulta");
 }

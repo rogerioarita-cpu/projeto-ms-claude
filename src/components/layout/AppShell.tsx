@@ -1,16 +1,20 @@
 import Link from "next/link";
 import { SignOutButton } from "./SignOutButton";
+import { SidebarUser } from "./SidebarUser";
 
 const NAV = [
+  { href: "/inicio", label: "Início" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/clientes", label: "Clientes" },
   { href: "/projetos", label: "Projetos" },
   { href: "/leads", label: "Pipeline de leads" },
+  { href: "/documentos", label: "Gestão documental" },
   { href: "/importacao", label: "Importação SPED" },
+  { href: "/analise", label: "Análise fiscal" },
+  { href: "/aprovacoes", label: "Aprovações" },
+  { href: "/workflow", label: "Workflow e acompanhamento" },
   { href: "/auditoria", label: "Auditoria SPED" },
   { href: "/creditos", label: "Recuperação de créditos" },
-  { href: "/workflow", label: "Workflow tributário" },
-  { href: "/documentos", label: "Gestão documental" },
   { href: "/usuarios", label: "Cadastro de usuários" },
 ];
 
@@ -25,12 +29,12 @@ export function AppShell({
 }) {
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-60 shrink-0 border-r border-border bg-navy text-white md:block">
+      <aside className="hidden w-60 shrink-0 border-r border-border bg-navy text-white md:flex md:flex-col">
         <div className="px-5 py-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-gold">Projeto MS</p>
           <p className="mt-0.5 text-sm text-white/70">Auditoria fiscal SPED</p>
         </div>
-        <nav className="mt-2 space-y-0.5 px-2">
+        <nav className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-2">
           {NAV.map((item) => (
             <Link
               key={item.href}
@@ -41,8 +45,11 @@ export function AppShell({
             </Link>
           ))}
         </nav>
-        <div className="absolute bottom-0 w-60 border-t border-white/10 px-4 py-4">
-          <SignOutButton />
+        <div className="border-t border-white/10">
+          <SidebarUser />
+          <div className="px-4 pb-4">
+            <SignOutButton />
+          </div>
         </div>
       </aside>
 
