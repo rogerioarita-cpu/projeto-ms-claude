@@ -1,7 +1,4 @@
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+﻿import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
@@ -10,8 +7,8 @@ import type { SpedFileTypeValue } from "@/lib/sped/types";
 
 const VALID_TYPES: SpedFileTypeValue[] = ["efd_icms_ipi", "efd_contribuicoes"];
 // Limite defensivo de tamanho de upload no MVP (requisito do PRD: arquivos podem ser > 100 MB;
-// aqui usamos um teto de segurança para a rota síncrona — arquivos maiores exigem upload
-// direto para storage + processamento assíncrono, previsto para a Fase 2).
+// aqui usamos um teto de seguranÃ§a para a rota sÃ­ncrona â€” arquivos maiores exigem upload
+// direto para storage + processamento assÃ­ncrono, previsto para a Fase 2).
 const MAX_UPLOAD_BYTES = 150 * 1024 * 1024;
 
 export async function GET(request: Request) {
@@ -37,7 +34,7 @@ export async function GET(request: Request) {
     return NextResponse.json(files);
   } catch (error) {
     console.error("GET /api/sped", error);
-    return NextResponse.json({ error: "Não foi possível carregar os arquivos SPED importados." }, { status: 500 });
+    return NextResponse.json({ error: "NÃ£o foi possÃ­vel carregar os arquivos SPED importados." }, { status: 500 });
   }
 }
 
@@ -57,41 +54,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nenhum arquivo foi enviado." }, { status: 400 });
     }
     if (!VALID_TYPES.includes(type as SpedFileTypeValue)) {
-      return NextResponse.json({ error: "Tipo de arquivo SPED inválido. Use 'efd_icms_ipi' ou 'efd_contribuicoes'." }, { status: 400 });
+      return NextResponse.json({ error: "Tipo de arquivo SPED invÃ¡lido. Use 'efd_icms_ipi' ou 'efd_contribuicoes'." }, { status: 400 });
     }
     if (file.size === 0) {
-      return NextResponse.json({ error: "O arquivo enviado está vazio." }, { status: 400 });
+      return NextResponse.json({ error: "O arquivo enviado estÃ¡ vazio." }, { status: 400 });
     }
     if (file.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json({ error: `Arquivo muito grande (${(file.size / (1024 * 1024)).toFixed(1)} MB). O limite atual é ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB.` }, { status: 400 });
+      return NextResponse.json({ error: `Arquivo muito grande (${(file.size / (1024 * 1024)).toFixed(1)} MB). O limite atual Ã© ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB.` }, { status: 400 });
     }
 
     if (projectId) {
       const project = await prisma.project.findUnique({ where: { id: projectId } });
-      if (!project) return NextResponse.json({ error: "Projeto não encontrado." }, { status: 400 });
+      if (!project) return NextResponse.json({ error: "Projeto nÃ£o encontrado." }, { status: 400 });
     }
 
     const content = await file.text();
     const parseResult = parseSpedFile(type as SpedFileTypeValue, content);
-   const record = toSpedFileRecord(parseResult);
-
-const extracted = JSON.parse(
-  JSON.stringify(record.extracted)
-) as Prisma.InputJsonValue;
+    const record = toSpedFileRecord(parseResult);
 
     const session = await getServerSession(authOptions);
     const uploadedById = (session?.user as { id?: string } | undefined)?.id;
 
-const spedFile = await prisma.spedFile.create({
-  data: {
-    ...record,
-    extracted,
-    type: type as SpedFileTypeValue,
-    fileName: file.name,
-    fileSizeKb: Math.round(file.size / 1024),
-    projectId,
-    uploadedById,
-  },
+    const spedFile = await prisma.spedFile.create({
+      data: {
+        ...record,
+        type: type as SpedFileTypeValue,
+        fileName: file.name,
+        fileSizeKb: Math.round(file.size / 1024),
+        projectId,
+        extracted: JSON.parse(JSON.stringify(record.extracted)),
+        uploadedById,
+      },
       include: {
         project: { include: { client: true } },
         uploadedBy: true,
@@ -101,6 +94,7 @@ const spedFile = await prisma.spedFile.create({
     return NextResponse.json(spedFile, { status: 201 });
   } catch (error) {
     console.error("POST /api/sped", error);
-    return NextResponse.json({ error: "Não foi possível importar o arquivo SPED." }, { status: 500 });
+    return NextResponse.json({ error: "NÃ£o foi possÃ­vel importar o arquivo SPED." }, { status: 500 });
   }
 }
+
