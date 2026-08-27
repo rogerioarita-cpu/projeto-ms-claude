@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { LeadDocuments } from "@/components/leads/LeadDocuments";
 
 type CompanyType = "industria" | "comercio" | "revenda" | "servicos";
 type LeadStatus =
@@ -33,7 +34,7 @@ type Lead = {
   createdAt: string;
 };
 
-const STATUS_COLUMNS: { key: LeadStatus; label: string }[] = [
+const STATUS_OPTIONS: { key: LeadStatus; label: string }[] = [
   { key: "novo", label: "Novo" },
   { key: "qualificacao", label: "Qualificação" },
   { key: "reuniao_agendada", label: "Reunião agendada" },
@@ -104,6 +105,7 @@ export default function LeadsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -189,6 +191,7 @@ export default function LeadsPage() {
       const res = await fetch(`/api/leads/${lead.id}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      if (expandedId === lead.id) setExpandedId(null);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao excluir lead.");
@@ -224,8 +227,10 @@ export default function LeadsPage() {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return leads;
-    return leads.filter((l) => [l.companyName, l.cnpj ?? "", l.contactName ?? "", l.contactEmail ?? ""].join(" ").toLowerCase().includes(q));
+    const list = !q
+      ? leads
+      : leads.filter((l) => [l.companyName, l.cnpj ?? "", l.contactName ?? "", l.contactEmail ?? ""].join(" ").toLowerCase().includes(q));
+    return list.slice().sort((a, b) => a.companyName.localeCompare(b.companyName, "pt-BR"));
   }, [leads, search]);
 
   const kpis = useMemo(() => {
@@ -305,7 +310,7 @@ export default function LeadsPage() {
             <label>
               <span className="mb-1 block text-sm font-medium">Status</span>
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as LeadStatus })} className="w-full rounded-md border px-3 py-2">
-                {STATUS_COLUMNS.map((s) => (
+                {STATUS_OPTIONS.map((s) => (
                   <option key={s.key} value={s.key}>
                     {s.label}
                   </option>
@@ -362,60 +367,102 @@ export default function LeadsPage() {
 
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold">Pipeline de leads</h2>
+            <h2 className="text-base font-semibold">Leads ({filtered.length})</h2>
             <input value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-md border px-3 py-2 text-sm" placeholder="Buscar por empresa, CNPJ ou contato..." />
           </div>
+
           {loading ? (
             <p className="text-sm text-muted">Carregando...</p>
+          ) : filtered.length === 0 ? (
+            <p className="text-sm text-muted">Nenhum lead encontrado.</p>
           ) : (
-            <div className="grid gap-4 overflow-x-auto md:grid-cols-3 xl:grid-cols-5">
-              {STATUS_COLUMNS.map((col) => {
-                const items = filtered.filter((l) => l.status === col.key);
+            <div className="space-y-2">
+              {filtered.map((lead) => {
+                const isOpen = expandedId === lead.id;
                 return (
-                  <Card key={col.key} className="min-w-56">
-                    <CardTitle className="flex items-center justify-between text-sm">
-                      {col.label}
-                      <span className="text-xs font-normal text-muted">{items.length}</span>
-                    </CardTitle>
-                    <div className="mt-3 space-y-2">
-                      {items.map((l) => (
-                        <div key={l.id} className="rounded-md border border-border p-3">
-                          <p className="text-sm font-medium">{l.companyName}</p>
-                          <p className="text-xs text-muted">{l.contactName || "—"}</p>
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {l.companyType && <Badge value={l.companyType} />}
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${l.procurationSigned ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}>
-                              {l.procurationSigned ? "Procuração ok" : "Sem procuração"}
-                            </span>
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${l.ndaSigned ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}>
-                              {l.ndaSigned ? "NDA ok" : "Sem NDA"}
-                            </span>
+                  <div key={lead.id} className="rounded-xl border border-border bg-white shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(isOpen ? null : lead.id)}
+                      className="flex w-full items-center justify-between p-4 text-left"
+                    >
+                      <div>
+                        <p className="font-medium">{lead.companyName}</p>
+                        <p className="text-xs text-muted">
+                          {lead.contactName || "—"} {lead.cnpj ? `· ${lead.cnpj}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="hidden text-sm font-medium tabular-nums text-navy sm:inline">{brl.format(Number(lead.estimatedValue))}</span>
+                        <Badge value={lead.status} />
+                        <span className="text-xs text-muted">{isOpen ? "▲" : "▼"}</span>
+                      </div>
+                    </button>
+
+                    {isOpen && (
+                      <div className="space-y-5 border-t border-border p-4">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-2 text-sm">
+                            <p>
+                              <span className="text-muted">Tipo de empresa: </span>
+                              {lead.companyType ? <Badge value={lead.companyType} /> : "—"}
+                            </p>
+                            <p>
+                              <span className="text-muted">E-mail: </span>
+                              {lead.contactEmail || "—"}
+                            </p>
+                            <p>
+                              <span className="text-muted">Telefone: </span>
+                              {lead.phone || "—"}
+                            </p>
+                            <p>
+                              <span className="text-muted">Cadastrado em: </span>
+                              {new Date(lead.createdAt).toLocaleDateString("pt-BR")}
+                            </p>
+                            <p className="flex flex-wrap gap-2">
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${lead.procurationSigned ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}>
+                                {lead.procurationSigned ? "Procuração assinada" : "Sem procuração"}
+                              </span>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${lead.ndaSigned ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}>
+                                {lead.ndaSigned ? "NDA assinado" : "Sem NDA"}
+                              </span>
+                            </p>
+                            {lead.notes && (
+                              <p>
+                                <span className="text-muted">Observações: </span>
+                                {lead.notes}
+                              </p>
+                            )}
                           </div>
-                          <p className="mt-2 text-sm font-medium tabular-nums text-navy">{brl.format(Number(l.estimatedValue))}</p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <div className="flex flex-col gap-2 sm:flex-row md:flex-col md:items-end">
                             <select
-                              value={l.status}
-                              onChange={(e) => moveStatus(l, e.target.value as LeadStatus)}
-                              className="rounded-md border px-2 py-1 text-xs"
+                              value={lead.status}
+                              onChange={(e) => moveStatus(lead, e.target.value as LeadStatus)}
+                              className="w-full rounded-md border px-2 py-1.5 text-sm md:w-auto"
                             >
-                              {STATUS_COLUMNS.map((s) => (
+                              {STATUS_OPTIONS.map((s) => (
                                 <option key={s.key} value={s.key}>
                                   {s.label}
                                 </option>
                               ))}
                             </select>
-                            <button type="button" onClick={() => edit(l)} className="rounded-md border px-2 py-1 text-xs">
-                              Editar
-                            </button>
-                            <button type="button" onClick={() => remove(l)} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700">
-                              Excluir
-                            </button>
+                            <div className="flex gap-2">
+                              <button type="button" onClick={() => edit(lead)} className="rounded-md border px-3 py-1.5 text-sm">
+                                Editar
+                              </button>
+                              <button type="button" onClick={() => remove(lead)} className="rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-700">
+                                Excluir
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      ))}
-                      {items.length === 0 ? <p className="text-xs text-muted">Sem leads nesta fase.</p> : null}
-                    </div>
-                  </Card>
+
+                        <div className="border-t border-border pt-4">
+                          <LeadDocuments leadId={lead.id} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -424,7 +471,7 @@ export default function LeadsPage() {
 
         <p className="text-xs text-muted">
           Alerta de prescrição: o prazo para recuperação de créditos tributários é de <strong>5 anos</strong>. Acompanhe o risco de
-          prescrição por projeto na tela de <strong>Workflow tributário</strong>.
+          prescrição por lead na tela de <strong>Workflow e acompanhamento</strong>.
         </p>
       </div>
     </AppShell>

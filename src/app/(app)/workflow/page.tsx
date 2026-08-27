@@ -9,6 +9,15 @@ export const dynamic = "force-dynamic";
 
 const PHASES = ["Lead Cadastrado", "Documentação", "Arquivos Importados", "Análise Fiscal", "Proposta Gerada", "Contrato Assinado", "Aprovação Final"];
 
+// Tipos de documento acompanhados nesta tela (PRD 6.8) — "Outros" fica de fora,
+// pois não é um documento obrigatório do fluxo.
+const TRACKED_DOC_TYPES: { value: "procuracao" | "nda" | "contrato" | "aditivo"; label: string }[] = [
+  { value: "procuracao", label: "Procuração" },
+  { value: "nda", label: "NDA" },
+  { value: "contrato", label: "Contrato" },
+  { value: "aditivo", label: "Aditivo" },
+];
+
 // SLA simplificado: dias sem avanço de fase considerados aceitáveis por etapa (MVP —
 // futuramente pode virar um campo configurável por lead).
 const SLA_DAYS = 30;
@@ -34,6 +43,13 @@ export default async function WorkflowPage() {
   });
   const spedFiles = await prisma.spedFile.findMany({ select: { cnpj: true } });
   const analises = await prisma.analiseFiscal.findMany({ select: { leadId: true, status: true } });
+  const documents = await prisma.document.findMany({
+    where: {
+      type: { in: TRACKED_DOC_TYPES.map((t) => t.value) },
+      ...(isClienteConsulta ? { leadId: linkedLeadId ?? "__nenhum__" } : {}),
+    },
+    select: { leadId: true, type: true, status: true, version: true },
+  });
 
   const now = new Date();
 
@@ -42,6 +58,14 @@ export default async function WorkflowPage() {
     const hasImportedFiles = leadCnpj.length > 0 && spedFiles.some((f) => onlyDigits(f.cnpj) === leadCnpj);
     const leadAnalises = analises.filter((a) => a.leadId === lead.id);
     const hasFinishedAnalise = leadAnalises.some((a) => a.status !== "em_andamento");
+
+    // Última versão de cada tipo de documento acompanhado, para este lead.
+    const leadDocuments = documents.filter((d) => d.leadId === lead.id);
+    const latestByType = TRACKED_DOC_TYPES.map((t) => {
+      const versions = leadDocuments.filter((d) => d.type === t.value);
+      const latest = versions.reduce<(typeof versions)[number] | null>((acc, d) => (!acc || d.version > acc.version ? d : acc), null);
+      return { type: t.value, label: t.label, status: latest?.status ?? null };
+    });
 
     const complete = [
       true, // 1. Lead Cadastrado — sempre completo, o lead existe
@@ -62,14 +86,14 @@ export default async function WorkflowPage() {
     const prescriptionRisk = !isTerminal && daysInPipeline > PRESCRICAO_DAYS;
     const slaBreach = !isTerminal && daysSinceUpdate > SLA_DAYS;
 
-    return { lead, complete, currentPhase, nextPhase, daysInPipeline, daysSinceUpdate, prescriptionRisk, slaBreach };
+    return { lead, complete, currentPhase, nextPhase, daysInPipeline, daysSinceUpdate, prescriptionRisk, slaBreach, latestByType };
   });
 
   return (
-    <AppShell title="Workflow e acompanhamento" subtitle="Timeline de 7 fases por lead, do cadastro à aprovação final.">
+    <AppShell title="Workflow e acompanhamento" subtitle="Timeline de 7 fases por lead e acompanhamento de Procuração, NDA, Contrato e Aditivo.">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {items.length === 0 && <p className="text-sm text-muted">Nenhum lead para acompanhar.</p>}
-        {items.map(({ lead, complete, currentPhase, nextPhase, daysInPipeline, prescriptionRisk, slaBreach }) => (
+        {items.map(({ lead, complete, currentPhase, nextPhase, daysInPipeline, prescriptionRisk, slaBreach, latestByType }) => (
           <Card key={lead.id}>
             <div className="flex items-start justify-between">
               <CardTitle className="text-base">{lead.companyName}</CardTitle>
@@ -99,6 +123,18 @@ export default async function WorkflowPage() {
                 Próxima etapa: <span className="font-medium text-navy">{nextPhase}</span>
               </p>
             )}
+
+            <div className="mt-3 border-t border-border pt-3">
+              <p className="mb-1.5 text-xs font-medium text-muted">Documentos</p>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {latestByType.map((d) => (
+                  <span key={d.type} className="flex items-center gap-1 text-xs">
+                    <span className="text-muted">{d.label}:</span>
+                    <Badge value={d.status ?? "pendente"} />
+                  </span>
+                ))}
+              </div>
+            </div>
 
             {prescriptionRisk && (
               <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-700">

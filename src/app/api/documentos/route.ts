@@ -5,9 +5,12 @@ import { prisma } from "@/lib/prisma";
 
 const DOC_TYPES = ["procuracao", "nda", "contrato", "aditivo", "outro"] as const;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const leadId = searchParams.get("leadId");
     const documents = await prisma.document.findMany({
+      where: leadId ? { leadId } : undefined,
       orderBy: { createdAt: "desc" },
       include: { lead: true, uploadedBy: true },
     });
