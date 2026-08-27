@@ -1,6 +1,3 @@
-// Schema Prisma — Projeto MS (Fase 2)
-// Reflete o modelo de dados descrito no PRD (seção 4).
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,49 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------------------------------------------------------------------
-// AUTENTICAÇÃO (NextAuth — modelo padrão adaptado)
-// ---------------------------------------------------------------------
-
-enum AppRole {
-  admin
-  gestor
-  analista_fiscal
-  juridico
-  comercial
-  aprovador
-  cliente_consulta
-}
-
-enum UserStatus {
-  ativo
-  inativo
-  bloqueado
-
-  @@map("user_status")
-}
-
 model User {
-  id            String     @id @default(cuid())
+  id            String          @id @default(cuid())
   name          String?
-  email         String     @unique
+  email         String          @unique
   emailVerified DateTime?
   image         String?
-  passwordHash  String? // login por e-mail/senha
-  status        UserStatus @default(ativo)
-  lastAccessAt  DateTime? // "último acesso" (PRD 6.10)
-  linkedLeadId  String? // empresa vinculada — obrigatório para o perfil cliente_consulta
-  linkedLead    Lead?      @relation("ClientUsers", fields: [linkedLeadId], references: [id], onDelete: SetNull)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-
-  roles     UserRole[]
-  accounts  Account[]
-  sessions  Session[]
-  leadsOwned Lead[]        @relation("LeadOwner")
-  documents  Document[]    @relation("DocumentUploadedBy")
-  spedFiles  SpedFile[]    @relation("SpedFileUploadedBy")
-  analises   AnaliseFiscal[] @relation("AnaliseAnalyst")
+  passwordHash  String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  status        UserStatus      @default(ativo)
+  lastAccessAt  DateTime?
+  linkedLeadId  String?
+  accounts      Account[]
+  analises      AnaliseFiscal[] @relation("AnaliseAnalyst")
+  documents     Document[]      @relation("DocumentUploadedBy")
+  spedFiles     SpedFile[]      @relation("SpedFileUploadedBy")
+  leadsOwned    Lead[]          @relation("LeadOwner")
+  sessions      Session[]
+  roles         UserRole[]
+  linkedLead    Lead?           @relation("ClientUsers", fields: [linkedLeadId], references: [id])
 
   @@map("users")
 }
@@ -67,22 +41,20 @@ model UserRole {
   @@map("user_roles")
 }
 
-// Modelos padrão exigidos pelo @next-auth/prisma-adapter
 model Account {
   id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
@@ -107,25 +79,224 @@ model VerificationToken {
   @@map("verification_tokens")
 }
 
-// ---------------------------------------------------------------------
-// DOMÍNIO DO PRODUTO
-// ---------------------------------------------------------------------
-
 model Client {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
   cnpj      String?
   segment   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  projects Project[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  projects  Project[]
 
   @@map("clients")
 }
 
-// LeadStatus e CompanyType (ver adiante) alinhados ao PRD seção 6.3/7.1 —
-// substituem o antigo enum LeadStage do MVP inicial.
+model Lead {
+  id                String          @id @default(cuid())
+  companyName       String
+  contactName       String?
+  contactEmail      String?
+  estimatedValue    Decimal         @default(0) @db.Decimal(14, 2)
+  ownerId           String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  cnpj              String?
+  companyType       CompanyType?
+  phone             String?
+  notes             String?
+  procurationSigned Boolean         @default(false)
+  ndaSigned         Boolean         @default(false)
+  status            LeadStatus      @default(novo)
+  analises          AnaliseFiscal[]
+  approvals         Aprovacao[]
+  documents         Document[]
+  owner             User?           @relation("LeadOwner", fields: [ownerId], references: [id])
+  clientUsers       User[]          @relation("ClientUsers")
+
+  @@map("leads")
+}
+
+model Project {
+  id               String          @id @default(cuid())
+  clientId         String?
+  name             String
+  status           ProjectStatus   @default(planejamento)
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  prescriptionDate DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  documents        Document[]
+  inconsistencies  Inconsistency[]
+  spedFiles        SpedFile[]
+  client           Client?         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  taxCredits       TaxCredit[]
+
+  @@map("projects")
+}
+
+model Document {
+  id           String    @id @default(cuid())
+  projectId    String?
+  name         String
+  docType      String?
+  version      Int       @default(1)
+  storagePath  String?
+  uploadedById String?
+  createdAt    DateTime  @default(now())
+  leadId       String?
+  type         DocType   @default(outro)
+  status       DocStatus @default(enviado)
+  sizeKb       Int       @default(0)
+  note         String?
+  lead         Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  project      Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy   User?     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([leadId])
+  @@map("documents")
+}
+
+model Inconsistency {
+  id          String   @id @default(cuid())
+  projectId   String?
+  code        String
+  description String
+  severity    Severity @default(media)
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("inconsistencies")
+}
+
+model TaxCredit {
+  id         String       @id @default(cuid())
+  projectId  String?
+  taxType    String
+  thesis     String?
+  amount     Decimal      @default(0) @db.Decimal(14, 2)
+  status     CreditStatus @default(identificado)
+  competence DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  project    Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("tax_credits")
+}
+
+model AnaliseFiscal {
+  id              String          @id @default(cuid())
+  leadId          String
+  taxType         TaxType
+  thesis          String
+  periodStart     String
+  periodEnd       String
+  estimatedCredit Decimal         @default(0) @db.Decimal(14, 2)
+  status          AnaliseStatus   @default(em_andamento)
+  diagnosis       String?
+  analystId       String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  analyst         User?           @relation("AnaliseAnalyst", fields: [analystId], references: [id])
+  lead            Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  approvals       Aprovacao[]
+  checklist       ChecklistItem[]
+
+  @@index([leadId])
+  @@map("analises_fiscais")
+}
+
+model ChecklistItem {
+  id          String        @id @default(cuid())
+  analiseId   String
+  description String
+  done        Boolean       @default(false)
+  order       Int           @default(0)
+  analise     AnaliseFiscal @relation(fields: [analiseId], references: [id], onDelete: Cascade)
+
+  @@index([analiseId])
+  @@map("checklist_items")
+}
+
+model Aprovacao {
+  id        String         @id @default(cuid())
+  leadId    String
+  analiseId String
+  area      ApprovalArea
+  status    ApprovalStatus @default(pendente)
+  decidedBy String?
+  decidedAt DateTime?
+  note      String?
+  createdAt DateTime       @default(now())
+  analise   AnaliseFiscal  @relation(fields: [analiseId], references: [id], onDelete: Cascade)
+  lead      Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([analiseId, area])
+  @@index([leadId])
+  @@map("aprovacoes")
+}
+
+model SpedFile {
+  id            String         @id @default(cuid())
+  projectId     String?
+  type          SpedFileType
+  status        SpedFileStatus @default(sucesso)
+  fileName      String
+  fileSizeKb    Int            @default(0)
+  companyName   String?
+  cnpj          String?
+  ie            String?
+  uf            String?
+  periodStart   String?
+  periodEnd     String?
+  totalRecords  Int            @default(0)
+  warningsCount Int            @default(0)
+  errorsCount   Int            @default(0)
+  extracted     Json?
+  uploadedById  String?
+  createdAt     DateTime       @default(now())
+
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy User?    @relation("SpedFileUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([type])
+  @@map("sped_files")
+}
+
+enum SpedFileType {
+  efd_icms_ipi
+  efd_contribuicoes
+
+  @@map("sped_file_type")
+}
+
+enum SpedFileStatus {
+  sucesso
+  aviso
+  erro
+
+  @@map("sped_file_status")
+}
+
+enum AppRole {
+  admin
+  gestor
+  analista_fiscal
+  juridico
+  comercial
+  aprovador
+  cliente_consulta
+}
+
+enum UserStatus {
+  ativo
+  inativo
+  bloqueado
+
+  @@map("user_status")
+}
 
 enum CompanyType {
   industria
@@ -150,32 +321,6 @@ enum LeadStatus {
   @@map("lead_status")
 }
 
-model Lead {
-  id             String      @id @default(cuid())
-  companyName    String
-  cnpj           String?
-  companyType    CompanyType?
-  contactName    String?
-  contactEmail   String?
-  phone          String?
-  status         LeadStatus  @default(novo)
-  estimatedValue Decimal     @default(0) @db.Decimal(14, 2)
-  procurationSigned Boolean  @default(false)
-  ndaSigned         Boolean  @default(false)
-  notes          String?
-  ownerId        String?
-  owner          User?       @relation("LeadOwner", fields: [ownerId], references: [id])
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  clientUsers User[]          @relation("ClientUsers")
-  documents   Document[]
-  analises    AnaliseFiscal[]
-  approvals   Aprovacao[]
-
-  @@map("leads")
-}
-
 enum ProjectStatus {
   planejamento
   importacao
@@ -184,26 +329,6 @@ enum ProjectStatus {
   aprovacao
   protocolo
   concluido
-}
-
-model Project {
-  id                String        @id @default(cuid())
-  clientId          String?
-  client            Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  name              String
-  status            ProjectStatus @default(planejamento)
-  periodStart       DateTime?
-  periodEnd         DateTime?
-  prescriptionDate  DateTime? // controle de prescrição (5 anos)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-
-  documents        Document[]  // legado: FK antiga (ver nota no model Document) — mantido só por compat de include já em uso
-  inconsistencies  Inconsistency[]
-  taxCredits       TaxCredit[]
-  spedFiles        SpedFile[]
-
-  @@map("projects")
 }
 
 enum DocType {
@@ -225,47 +350,11 @@ enum DocStatus {
   @@map("doc_status")
 }
 
-model Document {
-  id           String    @id @default(cuid())
-  leadId       String?
-  lead         Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  // Campo legado do MVP inicial (documentos vinculados a Projeto). Mantido apenas
-  // para não quebrar dados já existentes; o cadastro atual (PRD 6.4) usa `leadId`.
-  projectId    String?
-  project      Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name         String
-  type         DocType   @default(outro)
-  version      Int       @default(1)
-  status       DocStatus @default(enviado)
-  sizeKb       Int       @default(0)
-  storagePath  String?
-  note         String?
-  uploadedById String?
-  uploadedBy   User?     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
-  createdAt    DateTime  @default(now())
-
-  @@index([leadId])
-  @@map("documents")
-}
-
 enum Severity {
   baixa
   media
   alta
   critica
-}
-
-model Inconsistency {
-  id          String   @id @default(cuid())
-  projectId   String?
-  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  code        String
-  description String
-  severity    Severity @default(media)
-  resolved    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-
-  @@map("inconsistencies")
 }
 
 enum CreditStatus {
@@ -276,80 +365,6 @@ enum CreditStatus {
   recuperado
   rejeitado
 }
-
-model TaxCredit {
-  id          String       @id @default(cuid())
-  projectId   String?
-  project     Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  taxType     String
-  thesis      String?
-  amount      Decimal      @default(0) @db.Decimal(14, 2)
-  status      CreditStatus @default(identificado)
-  competence  DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-
-  @@map("tax_credits")
-}
-
-// ---------------------------------------------------------------------
-// IMPORTAÇÃO E CONTROLE DE ARQUIVOS SPED (PRD seções 6.5 / 6.6 / 8.3)
-// ---------------------------------------------------------------------
-
-enum SpedFileType {
-  efd_icms_ipi
-  efd_contribuicoes
-
-  @@map("sped_file_type")
-}
-
-enum SpedFileStatus {
-  sucesso
-  aviso
-  erro
-
-  @@map("sped_file_status")
-}
-
-model SpedFile {
-  id        String       @id @default(cuid())
-  projectId String?
-  project   Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type      SpedFileType
-  status    SpedFileStatus @default(sucesso)
-
-  // Arquivo
-  fileName    String
-  fileSizeKb  Int      @default(0)
-
-  // Identificação do contribuinte (registro 0000)
-  companyName    String?
-  cnpj           String?
-  ie             String?
-  uf             String?
-  periodStart    String? // YYYY-MM
-  periodEnd      String? // YYYY-MM
-
-  // Totais de processamento (para KPIs)
-  totalRecords   Int @default(0)
-  warningsCount  Int @default(0)
-  errorsCount    Int @default(0)
-
-  // Dados extraídos estruturados (apuração ICMS, PIS/COFINS, NFs, ajustes, avisos e erros)
-  extracted Json?
-
-  uploadedById String?
-  uploadedBy   User?    @relation("SpedFileUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
-
-  @@index([projectId])
-  @@index([type])
-  @@map("sped_files")
-}
-
-// ---------------------------------------------------------------------
-// ANÁLISE FISCAL (PRD 6.7 / 7.2)
-// ---------------------------------------------------------------------
 
 enum TaxType {
   pis_cofins
@@ -370,45 +385,6 @@ enum AnaliseStatus {
   @@map("analise_status")
 }
 
-model AnaliseFiscal {
-  id              String        @id @default(cuid())
-  leadId          String
-  lead            Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  taxType         TaxType
-  thesis          String
-  periodStart     String // YYYY-MM
-  periodEnd       String // YYYY-MM
-  estimatedCredit Decimal       @default(0) @db.Decimal(14, 2)
-  status          AnaliseStatus @default(em_andamento)
-  diagnosis       String?
-  analystId       String?
-  analyst         User?         @relation("AnaliseAnalyst", fields: [analystId], references: [id], onDelete: SetNull)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  checklist ChecklistItem[]
-  approvals Aprovacao[]
-
-  @@index([leadId])
-  @@map("analises_fiscais")
-}
-
-model ChecklistItem {
-  id          String        @id @default(cuid())
-  analiseId   String
-  analise     AnaliseFiscal @relation(fields: [analiseId], references: [id], onDelete: Cascade)
-  description String
-  done        Boolean       @default(false)
-  order       Int           @default(0)
-
-  @@index([analiseId])
-  @@map("checklist_items")
-}
-
-// ---------------------------------------------------------------------
-// APROVAÇÕES MULTIDISCIPLINARES (PRD 6.9 / 7.4)
-// ---------------------------------------------------------------------
-
 enum ApprovalArea {
   juridico
   financeiro
@@ -424,22 +400,4 @@ enum ApprovalStatus {
   rejeitado
 
   @@map("approval_status")
-}
-
-model Aprovacao {
-  id         String         @id @default(cuid())
-  leadId     String
-  lead       Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  analiseId  String
-  analise    AnaliseFiscal  @relation(fields: [analiseId], references: [id], onDelete: Cascade)
-  area       ApprovalArea
-  status     ApprovalStatus @default(pendente)
-  decidedBy  String?
-  decidedAt  DateTime?
-  note       String? // obrigatória em caso de rejeição (validado na aplicação)
-  createdAt  DateTime       @default(now())
-
-  @@unique([analiseId, area])
-  @@index([leadId])
-  @@map("aprovacoes")
 }

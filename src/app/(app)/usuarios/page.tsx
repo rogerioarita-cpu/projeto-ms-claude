@@ -59,7 +59,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
             <CardTitle className="text-base">{users.length} de {allUsers.length} usuários</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
               <form method="get" className="flex flex-wrap gap-2">
-                <select name="role" defaultValue={roleFilter} className="rounded-md border px-2 py-1.5 text-xs" onChange={(e) => e.currentTarget.form?.submit()}>
+                <select name="role" defaultValue={roleFilter} className="rounded-md border px-2 py-1.5 text-xs">
                   <option value="">Todos os papéis</option>
                   {ROLE_VALUES.map((r) => (
                     <option key={r} value={r}>
@@ -67,13 +67,13 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
                     </option>
                   ))}
                 </select>
-                <select name="status" defaultValue={statusFilter} className="rounded-md border px-2 py-1.5 text-xs" onChange={(e) => e.currentTarget.form?.submit()}>
+                <select name="status" defaultValue={statusFilter} className="rounded-md border px-2 py-1.5 text-xs">
                   <option value="">Todos os status</option>
                   <option value="ativo">Ativo</option>
                   <option value="inativo">Inativo</option>
                   <option value="bloqueado">Bloqueado</option>
                 </select>
-              </form>
+              <button type="submit" className="rounded-md border px-3 py-1.5 text-xs hover:bg-gray-50">Aplicar</button></form>
               <Link href="/usuarios/novo" className="rounded-md bg-navy px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
                 + Novo usuário
               </Link>
@@ -89,7 +89,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
                   <th className="py-2 pr-4">Papéis</th>
                   <th className="py-2 pr-4">Empresa vinculada</th>
                   <th className="py-2 pr-4">Status</th>
-                  <th className="py-2 pr-4">Último acesso</th>
+                  <th className="py-2 pr-4">último acesso</th>
                   <th className="py-2 pr-4">Ações</th>
                 </tr>
               </thead>
@@ -110,7 +110,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
                         ))}
                       </div>
                     </td>
-                    <td className="py-2 pr-4 text-muted">{u.linkedLead?.companyName || "—"}</td>
+                    <td className="py-2 pr-4 text-muted">{u.linkedLead?.companyName || "-"}</td>
                     <td className="py-2 pr-4">
                       <UserStatusSelect
                         userId={u.id}
@@ -141,9 +141,10 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
         <p className="text-xs text-muted">
           RBAC: cada usuário pode ter mais de um papel. O perfil <strong>Cliente-Consulta</strong> só enxerga dados da empresa
           vinculada; os demais perfis (Administrador, Gestor, Analista Fiscal, Jurídico, Comercial, Aprovador) têm acesso
-          conforme sua função no fluxo de análise e aprovação.
+          conforme sua função no fluxo de análise e aprovação.  
         </p>
       </div>
     </AppShell>
   );
 }
+
