@@ -1,9 +1,8 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/server/auth";
 import { AppShell } from "@/components/layout/AppShell";
-import { Card, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { prisma } from "@/lib/prisma";
+import { WorkflowAccordion, type WorkflowItem } from "@/components/workflow/WorkflowAccordion";
 
 export const dynamic = "force-dynamic";
 
@@ -89,66 +88,25 @@ export default async function WorkflowPage() {
     return { lead, complete, currentPhase, nextPhase, daysInPipeline, daysSinceUpdate, prescriptionRisk, slaBreach, latestByType };
   });
 
+  const accordionItems: WorkflowItem[] = items.map(
+    ({ lead, complete, currentPhase, nextPhase, daysInPipeline, prescriptionRisk, slaBreach, latestByType }) => ({
+      id: lead.id,
+      companyName: lead.companyName,
+      cnpj: lead.cnpj,
+      status: lead.status,
+      daysInPipeline,
+      complete,
+      currentPhase,
+      nextPhase,
+      prescriptionRisk,
+      slaBreach,
+      latestByType,
+    })
+  );
+
   return (
     <AppShell title="Workflow e acompanhamento" subtitle="Timeline de 7 fases por lead e acompanhamento de Procuração, NDA, Contrato e Aditivo.">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {items.length === 0 && <p className="text-sm text-muted">Nenhum lead para acompanhar.</p>}
-        {items.map(({ lead, complete, currentPhase, nextPhase, daysInPipeline, prescriptionRisk, slaBreach, latestByType }) => (
-          <Card key={lead.id}>
-            <div className="flex items-start justify-between">
-              <CardTitle className="text-base">{lead.companyName}</CardTitle>
-              <Badge value={lead.status} />
-            </div>
-            <p className="mt-1 text-xs text-muted">{daysInPipeline} dia(s) no pipeline</p>
-
-            <ol className="mt-4 space-y-2">
-              {PHASES.map((phase, idx) => {
-                const done = complete[idx];
-                const isCurrent = idx === currentPhase && lead.status !== "aprovado" && lead.status !== "cancelado";
-                return (
-                  <li key={phase} className="flex items-center gap-2 text-sm">
-                    <span
-                      className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${
-                        done ? "bg-green-500" : isCurrent ? "bg-blue-500" : "bg-gray-200"
-                      }`}
-                    />
-                    <span className={done ? "text-muted line-through" : isCurrent ? "font-medium text-navy" : "text-muted"}>{phase}</span>
-                  </li>
-                );
-              })}
-            </ol>
-
-            {nextPhase && (
-              <p className="mt-3 text-xs text-muted">
-                Próxima etapa: <span className="font-medium text-navy">{nextPhase}</span>
-              </p>
-            )}
-
-            <div className="mt-3 border-t border-border pt-3">
-              <p className="mb-1.5 text-xs font-medium text-muted">Documentos</p>
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {latestByType.map((d) => (
-                  <span key={d.type} className="flex items-center gap-1 text-xs">
-                    <span className="text-muted">{d.label}:</span>
-                    <Badge value={d.status ?? "pendente"} />
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {prescriptionRisk && (
-              <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-                ⚠ Risco de prescrição — mais de 5 anos no pipeline sem conclusão
-              </p>
-            )}
-            {slaBreach && !prescriptionRisk && (
-              <p className="mt-3 rounded-md bg-yellow-50 px-3 py-2 text-xs font-medium text-yellow-700">
-                ⚠ SLA estourado — mais de {SLA_DAYS} dias sem atualização
-              </p>
-            )}
-          </Card>
-        ))}
-      </div>
+      <WorkflowAccordion items={accordionItems} />
     </AppShell>
   );
 }
