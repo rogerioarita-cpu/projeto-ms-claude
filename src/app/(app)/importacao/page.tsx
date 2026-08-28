@@ -4,51 +4,8 @@ import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
-
-type Project = { id: string; name: string; client?: { name: string } | null };
-
-type SpedIssue = { linha: number; registro: string; mensagem: string };
-
-type SpedFileType = "efd_icms_ipi" | "efd_contribuicoes";
-type SpedFileStatus = "sucesso" | "aviso" | "erro";
-
-type SpedFileItem = {
-  id: string;
-  type: SpedFileType;
-  status: SpedFileStatus;
-  fileName: string;
-  fileSizeKb: number;
-  companyName: string | null;
-  cnpj: string | null;
-  ie: string | null;
-  uf: string | null;
-  periodStart: string | null;
-  periodEnd: string | null;
-  totalRecords: number;
-  warningsCount: number;
-  errorsCount: number;
-  createdAt: string;
-  project?: Project | null;
-  uploadedBy?: { name: string | null; email: string } | null;
-  extracted?: {
-    avisos: SpedIssue[];
-    erros: SpedIssue[];
-    documentos?: { totalNotasEntrada: number; totalNotasSaida: number; valorTotalEntradas: number; valorTotalSaidas: number };
-    apuracaoIcms?: {
-      valorTotalDebitos: number;
-      valorTotalCreditos: number;
-      saldoApurado: number;
-      icmsARecolher: number;
-      saldoCredorTransportar: number;
-      ajustes: Array<{ codigo: string; descricao: string; valor: number }>;
-    };
-    obrigacoesIcms?: Array<{ codigo: string | null; valor: number; vencimento: string | null }>;
-    totalItensC170?: number;
-    totalParticipantes?: number;
-    pis?: { creditoApuradoPeriodo: number; contribuicaoARecolher: number };
-    cofins?: { creditoApuradoPeriodo: number; contribuicaoARecolher: number };
-  };
-};
+import { SpedCascade } from "@/components/sped/SpedCascade";
+import type { Project, SpedFileItem, SpedFileType } from "@/components/sped/types";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const TYPE_OPTIONS: { value: SpedFileType; label: string; accept: string; hint: string }[] = [
@@ -80,9 +37,6 @@ export default function ImportacaoSpedPage() {
   const [uploadError, setUploadError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"" | SpedFileType>("");
-  const [statusFilter, setStatusFilter] = useState<"" | SpedFileStatus>("");
   const [selected, setSelected] = useState<SpedFileItem | null>(null);
 
   async function load() {
@@ -134,7 +88,12 @@ export default function ImportacaoSpedPage() {
       if (projectId) form.append("projectId", projectId);
       const res = await fetch("/api/sped", { method: "POST", body: form });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Não foi possível importar o arquivo.");
+      if (!res.ok) {
+        // Mesmo quando bloqueado por duplicidade, o backend grava um registro "já importado"
+        // para fins de auditoria — recarrega a lista para refletir essa tentativa.
+        await load();
+        throw new Error(data.error || "Não foi possível importar o arquivo.");
+      }
       setPendingFile(null);
       if (inputRef.current) inputRef.current.value = "";
       await load();
@@ -174,18 +133,9 @@ export default function ImportacaoSpedPage() {
     const sucesso = files.filter((f) => f.status === "sucesso").length;
     const aviso = files.filter((f) => f.status === "aviso").length;
     const erro = files.filter((f) => f.status === "erro").length;
-    return { total: files.length, sucesso, aviso, erro };
+    const duplicado = files.filter((f) => f.status === "duplicado").length;
+    return { total: files.length, sucesso, aviso, erro, duplicado };
   }, [files]);
-
-  const filtered = useMemo(
-    () =>
-      files.filter((f) => {
-        const q = search.toLowerCase().trim();
-        const hay = [f.fileName, f.companyName ?? "", f.cnpj ?? "", f.project?.name ?? "", f.project?.client?.name ?? ""].join(" ").toLowerCase();
-        return (!q || hay.includes(q)) && (!typeFilter || f.type === typeFilter) && (!statusFilter || f.status === statusFilter);
-      }),
-    [files, search, typeFilter, statusFilter]
-  );
 
   return (
     <AppShell title="Importação de arquivos SPED" subtitle="Upload, parsing automático e controle de arquivos EFD ICMS/IPI e EFD Contribuições.">
@@ -281,7 +231,7 @@ export default function ImportacaoSpedPage() {
         {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
         {/* KPIs */}
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-5">
           <Card>
             <CardTitle>Total importados</CardTitle>
             <p className="mt-2 text-2xl font-bold text-navy">{kpis.total}</p>
@@ -298,79 +248,17 @@ export default function ImportacaoSpedPage() {
             <CardTitle>Com erros</CardTitle>
             <p className="mt-2 text-2xl font-bold text-red-700">{kpis.erro}</p>
           </Card>
+          <Card>
+            <CardTitle>Já importados (bloqueados)</CardTitle>
+            <p className="mt-2 text-2xl font-bold text-gray-600">{kpis.duplicado}</p>
+          </Card>
         </div>
 
-        {/* Lista */}
-        <div className="rounded-xl border border-border bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b p-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-base font-semibold">Arquivos importados</h2>
-              <p className="text-sm text-muted">{filtered.length} de {files.length} arquivo(s)</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <input value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-md border px-3 py-2 text-sm" placeholder="Buscar por empresa, CNPJ, arquivo..." />
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as SpedFileType | "")} className="rounded-md border px-3 py-2 text-sm">
-                <option value="">Todos os tipos</option>
-                <option value="efd_icms_ipi">EFD ICMS/IPI</option>
-                <option value="efd_contribuicoes">EFD Contribuições</option>
-              </select>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as SpedFileStatus | "")} className="rounded-md border px-3 py-2 text-sm">
-                <option value="">Todos os status</option>
-                <option value="sucesso">Sucesso</option>
-                <option value="aviso">Com avisos</option>
-                <option value="erro">Com erros</option>
-              </select>
-            </div>
-          </div>
-          {loading ? (
-            <div className="p-6 text-sm text-muted">Carregando...</div>
-          ) : filtered.length === 0 ? (
-            <div className="p-8 text-center text-sm text-muted">Nenhum arquivo SPED importado ainda.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase text-muted">
-                    <th className="px-5 py-3">Arquivo</th>
-                    <th className="px-5 py-3">Tipo</th>
-                    <th className="px-5 py-3">Empresa / CNPJ</th>
-                    <th className="px-5 py-3">Período</th>
-                    <th className="px-5 py-3">Projeto</th>
-                    <th className="px-5 py-3">Registros</th>
-                    <th className="px-5 py-3">Status</th>
-                    <th className="px-5 py-3">Data</th>
-                    <th className="px-5 py-3 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((f) => (
-                    <tr key={f.id} className="border-b border-border last:border-0">
-                      <td className="px-5 py-3 font-medium">{f.fileName}<br /><span className="text-xs text-muted">{f.fileSizeKb} KB</span></td>
-                      <td className="px-5 py-3"><Badge value={f.type} /></td>
-                      <td className="px-5 py-3">{f.companyName || "—"}<br /><span className="text-xs text-muted">{f.cnpj || ""}</span></td>
-                      <td className="px-5 py-3">{f.periodStart === f.periodEnd ? f.periodStart || "—" : `${f.periodStart ?? "—"} a ${f.periodEnd ?? "—"}`}</td>
-                      <td className="px-5 py-3">{f.project?.name || "—"}<br /><span className="text-xs text-muted">{f.project?.client?.name || ""}</span></td>
-                      <td className="px-5 py-3">
-                        {f.totalRecords}
-                        {(f.warningsCount > 0 || f.errorsCount > 0) && (
-                          <div className="text-xs text-muted">{f.warningsCount > 0 ? `${f.warningsCount} aviso(s)` : ""}{f.warningsCount > 0 && f.errorsCount > 0 ? " · " : ""}{f.errorsCount > 0 ? `${f.errorsCount} erro(s)` : ""}</div>
-                        )}
-                      </td>
-                      <td className="px-5 py-3"><Badge value={f.status} /></td>
-                      <td className="px-5 py-3">{new Date(f.createdAt).toLocaleDateString("pt-BR")}</td>
-                      <td className="px-5 py-3">
-                        <div className="flex justify-end gap-2">
-                          <button type="button" onClick={() => openDetail(f)} className="rounded-md border px-3 py-1.5">Ver detalhe</button>
-                          <button type="button" onClick={() => remove(f)} className="rounded-md border border-red-200 px-3 py-1.5 text-red-700">Excluir</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        {loading ? (
+          <div className="rounded-xl border border-border bg-white p-6 text-sm text-muted shadow-sm">Carregando...</div>
+        ) : (
+          <SpedCascade files={files} onOpenDetail={openDetail} onRemove={remove} />
+        )}
       </div>
 
       {selected && <DetailModal item={selected} onClose={() => setSelected(null)} />}

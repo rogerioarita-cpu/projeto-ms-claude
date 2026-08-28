@@ -307,6 +307,7 @@ enum SpedFileStatus {
   sucesso
   aviso
   erro
+  duplicado
 
   @@map("sped_file_status")
 }
@@ -341,6 +342,10 @@ model SpedFile {
   uploadedById String?
   uploadedBy   User?    @relation("SpedFileUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
+
+  // Preenchido quando status = 'duplicado': aponta para o arquivo já importado anteriormente
+  // (mesmo CNPJ + tipo + período), usado para registrar a tentativa sem duplicar os dados extraídos.
+  duplicateOfId String?
 
   @@index([projectId])
   @@index([type])

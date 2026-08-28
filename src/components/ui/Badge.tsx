@@ -22,6 +22,7 @@ const COLORS: Record<string, string> = {
   sucesso: "bg-green-100 text-green-800",
   aviso: "bg-yellow-100 text-yellow-800",
   erro: "bg-red-100 text-red-800",
+  duplicado: "bg-gray-200 text-gray-700",
 
   efd_icms_ipi: "bg-blue-100 text-blue-800",
   efd_contribuicoes: "bg-purple-100 text-purple-800",
@@ -88,6 +89,7 @@ const LABELS: Record<string, string> = {
   sucesso: "Processado com sucesso",
   aviso: "Processado com avisos",
   erro: "Erro no processamento",
+  duplicado: "Já importado",
 
   efd_icms_ipi: "EFD ICMS/IPI",
   efd_contribuicoes: "EFD Contribuições",

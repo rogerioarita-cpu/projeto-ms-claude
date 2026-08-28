@@ -89,12 +89,13 @@ export default async function WorkflowPage() {
   });
 
   const accordionItems: WorkflowItem[] = items.map(
-    ({ lead, complete, currentPhase, nextPhase, daysInPipeline, prescriptionRisk, slaBreach, latestByType }) => ({
+    ({ lead, complete, currentPhase, nextPhase, daysInPipeline, daysSinceUpdate, prescriptionRisk, slaBreach, latestByType }) => ({
       id: lead.id,
       companyName: lead.companyName,
       cnpj: lead.cnpj,
       status: lead.status,
       daysInPipeline,
+      daysSinceUpdate,
       complete,
       currentPhase,
       nextPhase,

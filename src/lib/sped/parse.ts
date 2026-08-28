@@ -1,6 +1,9 @@
 import { parseEfdContribuicoes } from "./parser-contribuicoes";
 import { parseEfdIcmsIpi } from "./parser-icms-ipi";
+import { sniffSpedFileType } from "./util";
 import type { SpedFileTypeValue, SpedParseResult } from "./types";
+
+export { sniffSpedFileType };
 
 export function parseSpedFile(type: SpedFileTypeValue, content: string): SpedParseResult {
   if (type === "efd_icms_ipi") return parseEfdIcmsIpi(content);

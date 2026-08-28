@@ -1,9 +1,8 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { DeleteUserButton } from "@/components/users/DeleteUserButton";
-import { UserFilters } from "@/components/users/UserFilters";
 import { UserStatusSelect } from "@/components/users/UserStatusSelect";
 import { ROLE_LABELS, ROLE_VALUES, type RoleValue } from "@/lib/role-options";
 import { prisma } from "@/lib/prisma";
@@ -59,7 +58,22 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="text-base">{users.length} de {allUsers.length} usuários</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
-              <UserFilters roleFilter={roleFilter} statusFilter={statusFilter} />
+              <form method="get" className="flex flex-wrap gap-2">
+                <select name="role" defaultValue={roleFilter} className="rounded-md border px-2 py-1.5 text-xs" onChange={(e) => e.currentTarget.form?.submit()}>
+                  <option value="">Todos os papéis</option>
+                  {ROLE_VALUES.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABELS[r]}
+                    </option>
+                  ))}
+                </select>
+                <select name="status" defaultValue={statusFilter} className="rounded-md border px-2 py-1.5 text-xs" onChange={(e) => e.currentTarget.form?.submit()}>
+                  <option value="">Todos os status</option>
+                  <option value="ativo">Ativo</option>
+                  <option value="inativo">Inativo</option>
+                  <option value="bloqueado">Bloqueado</option>
+                </select>
+              </form>
               <Link href="/usuarios/novo" className="rounded-md bg-navy px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
                 + Novo usuário
               </Link>
@@ -133,7 +147,3 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
     </AppShell>
   );
 }
-
-
-
-

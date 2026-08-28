@@ -102,12 +102,9 @@ export default function LoginPage() {
           Entrar com Google
         </button>
 
-        <div className="mt-6 text-center text-xs text-muted">
-          <p className="font-medium">Usuários demo:</p>
-          <p>admin@projeto-ms.local</p>
-          <p>admin2@projeto-ms.local</p>
-          <p className="mt-1">Senha: Admin@123456</p>
-        </div>
+        <p className="mt-6 text-center text-xs text-muted">
+          Demo: admin@projeto-ms.local / trocar-esta-senha
+        </p>
       </div>
     </main>
   );

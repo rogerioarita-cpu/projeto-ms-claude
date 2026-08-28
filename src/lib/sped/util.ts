@@ -52,3 +52,28 @@ export function emptyContribuinte(): SpedContribuinte {
     indAtiv: null,
   };
 }
+
+// Registros que só existem em um dos dois leiautes — usados para detectar o tipo
+// real do arquivo e evitar que o usuário selecione o tipo errado no upload.
+const ICMS_IPI_ONLY_RECORDS = new Set(["C100", "C170", "C190", "E110", "E111", "E116", "E200", "E210"]);
+const CONTRIBUICOES_ONLY_RECORDS = new Set(["M100", "M105", "M200", "M210", "M500", "M505", "M600", "M610", "F500", "F510", "F525"]);
+
+/**
+ * Detecta o tipo de leiaute SPED do conteúdo (EFD ICMS/IPI vs EFD Contribuições)
+ * contando registros exclusivos de cada layout. Retorna null se não houver
+ * registros suficientes para decidir (ex.: arquivo vazio ou fora do padrão).
+ */
+export function sniffSpedFileType(content: string): { detected: "efd_icms_ipi" | "efd_contribuicoes" | null; icmsHits: number; contribHits: number } {
+  let icmsHits = 0;
+  let contribHits = 0;
+  const lines = content.split(/\r?\n/);
+  for (const raw of lines) {
+    if (!raw || !raw.trim() || !raw.trim().startsWith("|")) continue;
+    const reg = splitFields(raw)[0];
+    if (!reg) continue;
+    if (ICMS_IPI_ONLY_RECORDS.has(reg)) icmsHits++;
+    else if (CONTRIBUICOES_ONLY_RECORDS.has(reg)) contribHits++;
+  }
+  if (icmsHits === 0 && contribHits === 0) return { detected: null, icmsHits, contribHits };
+  return { detected: icmsHits >= contribHits ? "efd_icms_ipi" : "efd_contribuicoes", icmsHits, contribHits };
+}
