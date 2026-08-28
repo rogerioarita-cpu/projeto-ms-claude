@@ -80,7 +80,6 @@ export async function POST(request: Request) {
         ...record,
         type: type as SpedFileTypeValue,
         fileName: file.name,
-        extracted: JSON.parse(JSON.stringify(record.extracted)),
         fileSizeKb: Math.round(file.size / 1024),
         projectId,
         uploadedById,
