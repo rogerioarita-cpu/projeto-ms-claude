@@ -24,17 +24,20 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get("projectId");
+    const clientId = searchParams.get("clientId");
     const type = searchParams.get("type");
     const status = searchParams.get("status");
 
     const files = await prisma.spedFile.findMany({
       where: {
         ...(projectId ? { projectId } : {}),
+        ...(clientId ? { clientId } : {}),
         ...(type && VALID_TYPES.includes(type as SpedFileTypeValue) ? { type: type as SpedFileTypeValue } : {}),
         ...(status && ["sucesso", "aviso", "erro", "duplicado"].includes(status) ? { status: status as "sucesso" | "aviso" | "erro" | "duplicado" } : {}),
       },
       orderBy: { createdAt: "desc" },
       include: {
+        client: true,
         project: { include: { client: true } },
         uploadedBy: true,
       },
@@ -57,8 +60,12 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get("file");
     const type = String(formData.get("type") ?? "");
+    const clientId = formData.get("clientId") ? String(formData.get("clientId")) : "";
     const projectId = formData.get("projectId") ? String(formData.get("projectId")) : null;
 
+    if (!clientId) {
+      return NextResponse.json({ error: "Selecione o cliente antes de importar o arquivo." }, { status: 400 });
+    }
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Nenhum arquivo foi enviado." }, { status: 400 });
     }
@@ -72,9 +79,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Arquivo muito grande (${(file.size / (1024 * 1024)).toFixed(1)} MB). O limite atual é ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB.` }, { status: 400 });
     }
 
+    const client = await prisma.client.findUnique({ where: { id: clientId } });
+    if (!client) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
+
     if (projectId) {
       const project = await prisma.project.findUnique({ where: { id: projectId } });
       if (!project) return NextResponse.json({ error: "Projeto não encontrado." }, { status: 400 });
+      if (project.clientId && project.clientId !== clientId) {
+        return NextResponse.json({ error: "O projeto selecionado não pertence ao cliente selecionado." }, { status: 400 });
+      }
     }
 
     const content = await file.text();
@@ -108,6 +121,7 @@ export async function POST(request: Request) {
           periodStart: record.periodStart,
           periodEnd: record.periodEnd,
           status: { not: "duplicado" },
+          clientId,
           ...(projectId ? { projectId } : {}),
         },
         select: { id: true, cnpj: true, fileName: true, createdAt: true },
@@ -129,6 +143,7 @@ export async function POST(request: Request) {
             uf: record.uf,
             periodStart: record.periodStart,
             periodEnd: record.periodEnd,
+            clientId,
             projectId,
             uploadedById,
             duplicateOfId: existing.id,
@@ -148,13 +163,16 @@ export async function POST(request: Request) {
     const spedFile = await prisma.spedFile.create({
       data: {
         ...record,
+        extracted: record.extracted ? JSON.parse(JSON.stringify(record.extracted)) : null,
         type: type as SpedFileTypeValue,
         fileName: file.name,
         fileSizeKb: Math.round(file.size / 1024),
+        clientId,
         projectId,
         uploadedById,
       },
       include: {
+        client: true,
         project: { include: { client: true } },
         uploadedBy: true,
       },
@@ -166,3 +184,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não foi possível importar o arquivo SPED." }, { status: 500 });
   }
 }
+
+

@@ -39,8 +39,13 @@ export function SpedCascade({
   onRemove: (item: SpedFileItem) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [expandedType, setExpandedType] = useState<string | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+
+  function clientNameOf(f: SpedFileItem) {
+    return f.client?.name || f.project?.client?.name || "Sem cliente vinculado";
+  }
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -48,19 +53,32 @@ export function SpedCascade({
     return files.filter((f) => {
       return (
         !q ||
-        [f.fileName, f.companyName ?? "", f.project?.name ?? "", f.project?.client?.name ?? ""].join(" ").toLowerCase().includes(q) ||
+        [f.fileName, f.companyName ?? "", clientNameOf(f), f.project?.name ?? ""].join(" ").toLowerCase().includes(q) ||
         (digits.length > 0 && onlyDigits(f.cnpj).includes(digits))
       );
     });
   }, [files, search]);
 
-  const byType = useMemo(() => {
-    return TYPE_ORDER.map((t) => {
-      const typeFiles = filtered.filter((f) => f.type === t.value);
-      const importados = typeFiles.filter((f) => isOk(f.status));
-      const naoImportados = typeFiles.filter((f) => !isOk(f.status));
-      return { ...t, files: typeFiles, importados, naoImportados };
-    });
+  // Cascata: Cliente -> Tipo de arquivo -> Importados / Não importados
+  const byClient = useMemo(() => {
+    const groups = new Map<string, SpedFileItem[]>();
+    for (const f of filtered) {
+      const name = clientNameOf(f);
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name)!.push(f);
+    }
+    return Array.from(groups.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+      .map(([clientName, clientFiles]) => ({
+        clientName,
+        files: clientFiles,
+        byType: TYPE_ORDER.map((t) => {
+          const typeFiles = clientFiles.filter((f) => f.type === t.value);
+          const importados = typeFiles.filter((f) => isOk(f.status));
+          const naoImportados = typeFiles.filter((f) => !isOk(f.status));
+          return { ...t, files: typeFiles, importados, naoImportados };
+        }),
+      }));
   }, [filtered]);
 
   function renderFilesTable(list: SpedFileItem[]) {
@@ -70,6 +88,7 @@ export function SpedCascade({
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase text-muted">
               <th className="px-5 py-2">Arquivo</th>
+              <th className="px-5 py-2">Cliente</th>
               <th className="px-5 py-2">Empresa / CNPJ</th>
               <th className="px-5 py-2">Período</th>
               <th className="px-5 py-2">Registros</th>
@@ -88,6 +107,7 @@ export function SpedCascade({
                     <br />
                     <span className="text-xs text-muted">{f.fileSizeKb} KB</span>
                   </td>
+                  <td className="px-5 py-2.5">{clientNameOf(f)}</td>
                   <td className="px-5 py-2.5">
                     {f.companyName || "—"}
                     <br />
@@ -163,70 +183,98 @@ export function SpedCascade({
       ) : filtered.length === 0 ? (
         <div className="p-8 text-center text-sm text-muted">Nenhum arquivo encontrado para a busca.</div>
       ) : (
-        <div>
-          <div className="flex flex-wrap gap-2 border-b border-border px-5 py-4">
-            {byType.map((t) => {
-              if (t.files.length === 0) {
-                return (
-                  <div key={t.value} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 opacity-40">
-                    <Badge value={t.value} />
-                    <span className="text-xs text-muted">0 arquivo(s)</span>
-                  </div>
-                );
-              }
-              const typeIsOpen = expandedType === t.value;
-              return (
-                <button
-                  key={t.value}
-                  type="button"
-                  onClick={() => setExpandedType(typeIsOpen ? null : t.value)}
-                  className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${
-                    typeIsOpen ? "border-navy bg-navy/5" : "border-border hover:bg-gray-50"
-                  }`}
-                  aria-expanded={typeIsOpen}
-                >
-                  <Badge value={t.value} />
-                  <span className="text-xs text-muted">{t.files.length} arquivo(s)</span>
-                  <ChevronIcon open={typeIsOpen} />
-                </button>
-              );
-            })}
-          </div>
-
-          {byType.map((t) => {
-            if (expandedType !== t.value) return null;
+        <div className="divide-y divide-border">
+          {byClient.map((clientGroup) => {
+            const clientIsOpen = expandedClient === clientGroup.clientName;
             return (
-              <div key={t.value} className="divide-y divide-border bg-gray-50/40">
-                {(
-                  [
-                    { key: "ok", label: "Arquivos importados", list: t.importados, badgeClass: "bg-green-100 text-green-800" },
-                    { key: "nao_ok", label: "Arquivos não importados", list: t.naoImportados, badgeClass: "bg-red-100 text-red-800" },
-                  ] as const
-                ).map((group) => {
-                  const groupKey = `${t.value}::${group.key}`;
-                  const groupIsOpen = expandedGroup === groupKey;
-                  return (
-                    <div key={groupKey}>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedGroup(groupIsOpen ? null : groupKey)}
-                        disabled={group.list.length === 0}
-                        className="flex w-full items-center justify-between gap-3 px-5 py-2.5 pl-10 text-left transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-                        aria-expanded={groupIsOpen}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${group.badgeClass}`}>{group.label}</span>
-                        </div>
-                        <div className="flex flex-shrink-0 items-center gap-3">
-                          <span className="text-xs text-muted">{group.list.length} arquivo(s)</span>
-                          {group.list.length > 0 && <ChevronIcon open={groupIsOpen} />}
-                        </div>
-                      </button>
+              <div key={clientGroup.clientName}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedClient(clientIsOpen ? null : clientGroup.clientName)}
+                  className={`flex w-full items-center justify-between gap-3 px-5 py-3 text-left transition-colors ${
+                    clientIsOpen ? "bg-navy/5" : "hover:bg-gray-50"
+                  }`}
+                  aria-expanded={clientIsOpen}
+                >
+                  <span className="text-sm font-semibold text-navy">{clientGroup.clientName}</span>
+                  <div className="flex flex-shrink-0 items-center gap-3">
+                    <span className="text-xs text-muted">{clientGroup.files.length} arquivo(s)</span>
+                    <ChevronIcon open={clientIsOpen} />
+                  </div>
+                </button>
 
-                      {groupIsOpen && group.list.length > 0 && renderFilesTable(group.list)}
+                {clientIsOpen && (
+                  <div className="bg-gray-50/40">
+                    <div className="flex flex-wrap gap-2 border-y border-border px-5 py-3 pl-8">
+                      {clientGroup.byType.map((t) => {
+                        const typeKey = `${clientGroup.clientName}::${t.value}`;
+                        if (t.files.length === 0) {
+                          return (
+                            <div key={typeKey} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 opacity-40">
+                              <Badge value={t.value} />
+                              <span className="text-xs text-muted">0 arquivo(s)</span>
+                            </div>
+                          );
+                        }
+                        const typeIsOpen = expandedType === typeKey;
+                        return (
+                          <button
+                            key={typeKey}
+                            type="button"
+                            onClick={() => setExpandedType(typeIsOpen ? null : typeKey)}
+                            className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${
+                              typeIsOpen ? "border-navy bg-navy/5" : "border-border hover:bg-gray-100"
+                            }`}
+                            aria-expanded={typeIsOpen}
+                          >
+                            <Badge value={t.value} />
+                            <span className="text-xs text-muted">{t.files.length} arquivo(s)</span>
+                            <ChevronIcon open={typeIsOpen} />
+                          </button>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+
+                    {clientGroup.byType.map((t) => {
+                      const typeKey = `${clientGroup.clientName}::${t.value}`;
+                      if (expandedType !== typeKey) return null;
+                      return (
+                        <div key={typeKey} className="divide-y divide-border">
+                          {(
+                            [
+                              { key: "ok", label: "Arquivos importados", list: t.importados, badgeClass: "bg-green-100 text-green-800" },
+                              { key: "nao_ok", label: "Arquivos não importados", list: t.naoImportados, badgeClass: "bg-red-100 text-red-800" },
+                            ] as const
+                          ).map((group) => {
+                            const groupKey = `${typeKey}::${group.key}`;
+                            const groupIsOpen = expandedGroup === groupKey;
+                            return (
+                              <div key={groupKey}>
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedGroup(groupIsOpen ? null : groupKey)}
+                                  disabled={group.list.length === 0}
+                                  className="flex w-full items-center justify-between gap-3 px-5 py-2.5 pl-12 text-left transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                                  aria-expanded={groupIsOpen}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${group.badgeClass}`}>{group.label}</span>
+                                  </div>
+                                  <div className="flex flex-shrink-0 items-center gap-3">
+                                    <span className="text-xs text-muted">{group.list.length} arquivo(s)</span>
+                                    {group.list.length > 0 && <ChevronIcon open={groupIsOpen} />}
+                                  </div>
+                                </button>
+
+                                {groupIsOpen && group.list.length > 0 && renderFilesTable(group.list)}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}

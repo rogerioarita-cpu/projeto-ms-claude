@@ -1,4 +1,5 @@
-export type Project = { id: string; name: string; client?: { name: string } | null };
+export type Project = { id: string; name: string; clientId?: string | null; client?: { name: string } | null };
+export type Client = { id: string; name: string };
 
 export type SpedIssue = { linha: number; registro: string; mensagem: string };
 
@@ -21,6 +22,7 @@ export type SpedFileItem = {
   warningsCount: number;
   errorsCount: number;
   createdAt: string;
+  client?: Client | null;
   project?: Project | null;
   uploadedBy?: { name: string | null; email: string } | null;
   duplicateOfId?: string | null;

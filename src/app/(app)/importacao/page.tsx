@@ -5,7 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { SpedCascade } from "@/components/sped/SpedCascade";
-import type { Project, SpedFileItem, SpedFileType } from "@/components/sped/types";
+import type { Client, Project, SpedFileItem, SpedFileType } from "@/components/sped/types";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const TYPE_OPTIONS: { value: SpedFileType; label: string; accept: string; hint: string }[] = [
@@ -26,9 +26,11 @@ const TYPE_OPTIONS: { value: SpedFileType; label: string; accept: string; hint: 
 export default function ImportacaoSpedPage() {
   const [files, setFiles] = useState<SpedFileItem[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [clientId, setClientId] = useState("");
   const [tipo, setTipo] = useState<SpedFileType>("efd_icms_ipi");
   const [projectId, setProjectId] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -43,14 +45,28 @@ export default function ImportacaoSpedPage() {
     setLoading(true);
     setError("");
     try {
-      const [filesRes, projectsRes] = await Promise.all([
+      const [filesRes, projectsRes, clientsRes] = await Promise.all([
         fetch("/api/sped", { cache: "no-store" }),
         fetch("/api/projetos", { cache: "no-store" }),
+        fetch("/api/clientes", { cache: "no-store" }),
       ]);
       const filesData = await filesRes.json();
       if (!filesRes.ok) throw new Error(filesData.error || "Erro ao carregar arquivos importados.");
       setFiles(filesData);
-      if (projectsRes.ok) setProjects(await projectsRes.json());
+
+      if (projectsRes.ok) {
+        setProjects(await projectsRes.json());
+      } else {
+        const projectsData = await projectsRes.json().catch(() => null);
+        throw new Error(projectsData?.error || "Erro ao carregar projetos.");
+      }
+
+      if (clientsRes.ok) {
+        setClients(await clientsRes.json());
+      } else {
+        const clientsData = await clientsRes.json().catch(() => null);
+        throw new Error(clientsData?.error || "Erro ao carregar clientes.");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar dados.");
     } finally {
@@ -74,7 +90,16 @@ export default function ImportacaoSpedPage() {
     if (dropped) setPendingFile(dropped);
   }
 
+  const projectsForClient = useMemo(
+    () => (clientId ? projects.filter((p) => !p.clientId || p.clientId === clientId) : projects),
+    [projects, clientId]
+  );
+
   async function submitUpload() {
+    if (!clientId) {
+      setUploadError("Selecione o cliente antes de importar o arquivo.");
+      return;
+    }
     if (!pendingFile) {
       setUploadError("Selecione ou arraste um arquivo SPED (.txt) para importar.");
       return;
@@ -84,6 +109,7 @@ export default function ImportacaoSpedPage() {
     try {
       const form = new FormData();
       form.append("file", pendingFile);
+      form.append("clientId", clientId);
       form.append("type", tipo);
       if (projectId) form.append("projectId", projectId);
       const res = await fetch("/api/sped", { method: "POST", body: form });
@@ -148,6 +174,45 @@ export default function ImportacaoSpedPage() {
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             <label>
+              <span className="mb-1 block text-sm font-medium">Cliente *</span>
+              <select
+                value={clientId}
+                required
+                onChange={(e) => {
+                  const newClientId = e.target.value;
+                  setClientId(newClientId);
+                  // Se o projeto selecionado não pertence mais ao cliente escolhido, limpa a seleção.
+                  const currentProject = projects.find((p) => p.id === projectId);
+                  if (currentProject?.clientId && currentProject.clientId !== newClientId) {
+                    setProjectId("");
+                  }
+                }}
+                className="w-full rounded-md border px-3 py-2 text-sm"
+              >
+                <option value="">Selecione o cliente</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {clients.length === 0 && (
+                <span className="mt-1 block text-xs text-muted">Nenhum cliente cadastrado — cadastre em "Clientes" antes de importar.</span>
+              )}
+            </label>
+            <label>
+              <span className="mb-1 block text-sm font-medium">Projeto</span>
+              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm">
+                <option value="">Sem projeto vinculado</option>
+                {projectsForClient.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.client ? ` — ${p.client.name}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               <span className="mb-1 block text-sm font-medium">Tipo de arquivo *</span>
               <select value={tipo} onChange={(e) => setTipo(e.target.value as SpedFileType)} className="w-full rounded-md border px-3 py-2 text-sm">
                 {TYPE_OPTIONS.map((t) => (
@@ -157,18 +222,6 @@ export default function ImportacaoSpedPage() {
                 ))}
               </select>
               <span className="mt-1 block text-xs text-muted">{TYPE_OPTIONS.find((t) => t.value === tipo)?.hint}</span>
-            </label>
-            <label className="md:col-span-2">
-              <span className="mb-1 block text-sm font-medium">Projeto</span>
-              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm">
-                <option value="">Sem projeto vinculado</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                    {p.client ? ` — ${p.client.name}` : ""}
-                  </option>
-                ))}
-              </select>
             </label>
           </div>
 
@@ -207,7 +260,7 @@ export default function ImportacaoSpedPage() {
           <div className="mt-4 flex items-center gap-3">
             <button
               type="button"
-              disabled={uploading || !pendingFile}
+              disabled={uploading || !pendingFile || !clientId}
               onClick={submitUpload}
               className="rounded-md bg-navy px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
@@ -283,6 +336,7 @@ function DetailModal({ item, onClose }: { item: SpedFileItem; onClose: () => voi
         </div>
 
         <dl className="grid grid-cols-2 gap-3 text-sm">
+          <div><dt className="text-xs uppercase text-muted">Cliente</dt><dd>{item.client?.name || item.project?.client?.name || "—"}</dd></div>
           <div><dt className="text-xs uppercase text-muted">Empresa</dt><dd>{item.companyName || "—"}</dd></div>
           <div><dt className="text-xs uppercase text-muted">CNPJ</dt><dd>{item.cnpj || "—"}</dd></div>
           <div><dt className="text-xs uppercase text-muted">IE / UF</dt><dd>{item.ie || "—"} {item.uf ? `/ ${item.uf}` : ""}</dd></div>

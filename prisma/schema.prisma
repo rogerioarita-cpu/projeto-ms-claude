@@ -119,7 +119,8 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  projects Project[]
+  projects  Project[]
+  spedFiles SpedFile[]
 
   @@map("clients")
 }
@@ -314,6 +315,8 @@ enum SpedFileStatus {
 
 model SpedFile {
   id        String       @id @default(cuid())
+  clientId  String
+  client    Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   projectId String?
   project   Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   type      SpedFileType
@@ -348,6 +351,7 @@ model SpedFile {
   duplicateOfId String?
 
   @@index([projectId])
+  @@index([clientId])
   @@index([type])
   @@map("sped_files")
 }
