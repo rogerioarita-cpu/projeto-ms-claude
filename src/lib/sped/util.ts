@@ -55,7 +55,12 @@ export function emptyContribuinte(): SpedContribuinte {
 
 // Registros que só existem em um dos dois leiautes — usados para detectar o tipo
 // real do arquivo e evitar que o usuário selecione o tipo errado no upload.
-const ICMS_IPI_ONLY_RECORDS = new Set(["C100", "C170", "C190", "E110", "E111", "E116", "E200", "E210"]);
+// Importante: C100/C170/C190 (documentos fiscais) NÃO entram aqui, pois também
+// aparecem no EFD Contribuições (Bloco C é usado lá para apurar crédito de
+// PIS/COFINS sobre notas de compra) — usar esses registros como "exclusivos do
+// ICMS/IPI" gerava falso positivo em arquivos de Contribuições com muitas notas.
+// Only Bloco E (apuração de ICMS/IPI) é realmente exclusivo do leiaute ICMS/IPI.
+const ICMS_IPI_ONLY_RECORDS = new Set(["E110", "E111", "E116", "E200", "E210", "E220", "E230", "E240", "E250", "E260"]);
 const CONTRIBUICOES_ONLY_RECORDS = new Set(["M100", "M105", "M200", "M210", "M500", "M505", "M600", "M610", "F500", "F510", "F525"]);
 
 /**

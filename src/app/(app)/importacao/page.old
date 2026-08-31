@@ -44,43 +44,34 @@ export default function ImportacaoSpedPage() {
   async function load() {
     setLoading(true);
     setError("");
-    // Cada recurso é tratado de forma independente: uma falha em um deles
-    // (ex.: /api/sped) não pode impedir que clientes/projetos, que vieram
-    // com sucesso, sejam aplicados na tela.
-    const errors: string[] = [];
+    try {
+      const [filesRes, projectsRes, clientsRes] = await Promise.all([
+        fetch("/api/sped", { cache: "no-store" }),
+        fetch("/api/projetos", { cache: "no-store" }),
+        fetch("/api/clientes", { cache: "no-store" }),
+      ]);
+      const filesData = await filesRes.json();
+      if (!filesRes.ok) throw new Error(filesData.error || "Erro ao carregar arquivos importados.");
+      setFiles(filesData);
 
-    const [filesRes, projectsRes, clientsRes] = await Promise.allSettled([
-      fetch("/api/sped", { cache: "no-store" }),
-      fetch("/api/projetos", { cache: "no-store" }),
-      fetch("/api/clientes", { cache: "no-store" }),
-    ]);
+      if (projectsRes.ok) {
+        setProjects(await projectsRes.json());
+      } else {
+        const projectsData = await projectsRes.json().catch(() => null);
+        throw new Error(projectsData?.error || "Erro ao carregar projetos.");
+      }
 
-    if (filesRes.status === "fulfilled") {
-      const data = await filesRes.value.json().catch(() => null);
-      if (filesRes.value.ok && data) setFiles(data);
-      else errors.push(data?.error || "Erro ao carregar arquivos importados.");
-    } else {
-      errors.push("Erro ao carregar arquivos importados.");
+      if (clientsRes.ok) {
+        setClients(await clientsRes.json());
+      } else {
+        const clientsData = await clientsRes.json().catch(() => null);
+        throw new Error(clientsData?.error || "Erro ao carregar clientes.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao carregar dados.");
+    } finally {
+      setLoading(false);
     }
-
-    if (projectsRes.status === "fulfilled") {
-      const data = await projectsRes.value.json().catch(() => null);
-      if (projectsRes.value.ok && data) setProjects(data);
-      else errors.push(data?.error || "Erro ao carregar projetos.");
-    } else {
-      errors.push("Erro ao carregar projetos.");
-    }
-
-    if (clientsRes.status === "fulfilled") {
-      const data = await clientsRes.value.json().catch(() => null);
-      if (clientsRes.value.ok && data) setClients(data);
-      else errors.push(data?.error || "Erro ao carregar clientes.");
-    } else {
-      errors.push("Erro ao carregar clientes.");
-    }
-
-    setError(errors.join(" "));
-    setLoading(false);
   }
   useEffect(() => {
     load();
@@ -105,20 +96,6 @@ export default function ImportacaoSpedPage() {
     () => (clientId ? projects.filter((p) => p.clientId === clientId) : []),
     [projects, clientId]
   );
-
-  // Clientes exibidos uma única vez (caso existam registros duplicados no banco,
-  // ex.: mesmo nome/razão social cadastrado mais de uma vez) e em ordem alfabética
-  // crescente por razão social/nome.
-  const sortedClients = useMemo(() => {
-    const seen = new Set<string>();
-    const unique = clients.filter((c) => {
-      const key = c.name.trim().toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    return unique.sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
-  }, [clients]);
 
   async function submitUpload() {
     if (!clientId) {
@@ -215,7 +192,7 @@ export default function ImportacaoSpedPage() {
                 className="w-full rounded-md border px-3 py-2 text-sm"
               >
                 <option value="">Selecione o cliente</option>
-                {sortedClients.map((c) => (
+                {clients.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>

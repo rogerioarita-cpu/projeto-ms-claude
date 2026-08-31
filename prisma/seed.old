@@ -30,18 +30,15 @@ async function main() {
     },
   });
 
-  // Não há unique constraint em Client.name/cnpj no schema, então usamos
-  // findFirst + create (em vez de `create` direto) para evitar cadastrar o
-  // mesmo cliente de novo toda vez que o seed é executado.
-  async function upsertClientByName(data: { name: string; cnpj: string; segment: string }) {
-    const existing = await prisma.client.findFirst({ where: { name: data.name } });
-    if (existing) return existing;
-    return prisma.client.create({ data });
-  }
-
-  const auroraClient = await upsertClientByName({ name: "Indústria Aurora S/A", cnpj: "12.345.678/0001-90", segment: "Indústria" });
-  const valeNorteClient = await upsertClientByName({ name: "Distribuidora Vale Norte", cnpj: "98.765.432/0001-10", segment: "Atacado" });
-  const tecnoClient = await upsertClientByName({ name: "TecnoServiços Ltda", cnpj: "45.678.912/0001-55", segment: "Serviços" });
+  const auroraClient = await prisma.client.create({
+    data: { name: "Indústria Aurora S/A", cnpj: "12.345.678/0001-90", segment: "Indústria" },
+  });
+  const valeNorteClient = await prisma.client.create({
+    data: { name: "Distribuidora Vale Norte", cnpj: "98.765.432/0001-10", segment: "Atacado" },
+  });
+  const tecnoClient = await prisma.client.create({
+    data: { name: "TecnoServiços Ltda", cnpj: "45.678.912/0001-55", segment: "Serviços" },
+  });
 
   const projAurora = await prisma.project.create({
     data: {

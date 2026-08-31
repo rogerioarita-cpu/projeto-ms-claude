@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isValidCnpj, onlyDigitsCnpj } from "@/lib/cnpj";
+
+function cleanCnpj(value: unknown) {
+  if (!value) return null;
+  return String(value).replace(/\D/g, "");
+}
 
 export async function GET() {
   try {
@@ -19,12 +23,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const name = String(body.name ?? "").trim();
-    const cnpj = onlyDigitsCnpj(body.cnpj);
+    const cnpj = cleanCnpj(body.cnpj);
     const segment = body.segment ? String(body.segment).trim() : null;
 
     if (!name) return NextResponse.json({ error: "Nome / Razão social é obrigatório." }, { status: 400 });
-    if (!cnpj) return NextResponse.json({ error: "CNPJ é obrigatório." }, { status: 400 });
-    if (!isValidCnpj(cnpj)) return NextResponse.json({ error: "CNPJ inválido. Verifique os números informados." }, { status: 400 });
+    if (cnpj && cnpj.length !== 14) return NextResponse.json({ error: "O CNPJ deve possuir 14 dígitos." }, { status: 400 });
 
     const client = await prisma.client.create({ data: { name, cnpj, segment } });
     return NextResponse.json(client, { status: 201 });

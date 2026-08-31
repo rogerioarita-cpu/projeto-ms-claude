@@ -1,10 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { isValidCnpj, onlyDigitsCnpj } from "@/lib/cnpj";
 
 type Client = { id: string; name: string; cnpj: string | null; segment: string | null; createdAt: string; _count?: { projects: number } };
+type SortField = "name" | "cnpj";
 
 const emptyForm = { name: "", cnpj: "", segment: "" };
 
@@ -24,9 +26,12 @@ export default function ClientesPage() {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [sortField, setSortField] = useState<SortField>("name");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [cnpjFieldError, setCnpjFieldError] = useState("");
+  const cnpjInputRef = useRef<HTMLInputElement>(null);
 
   async function loadClients() {
     setLoading(true); setError("");
@@ -41,16 +46,38 @@ export default function ClientesPage() {
 
   useEffect(() => { void loadClients(); }, []);
 
-  function resetForm() { setForm(emptyForm); setEditingId(null); }
+  function resetForm() { setForm(emptyForm); setEditingId(null); setCnpjFieldError(""); }
 
   function editClient(client: Client) {
     setEditingId(client.id);
     setForm({ name: client.name, cnpj: client.cnpj ? formatCnpj(client.cnpj) : "", segment: client.segment ?? "" });
+    setCnpjFieldError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // Valida o CNPJ assim que o campo perde o foco. Se estiver incompleto ou
+  // com dígitos verificadores inválidos, mostra o erro e devolve o foco para
+  // o campo, impedindo o usuário de seguir para o próximo enquanto o CNPJ
+  // não estiver correto.
+  function handleCnpjBlur() {
+    const digits = onlyDigitsCnpj(form.cnpj);
+    if (!digits) { setCnpjFieldError("CNPJ é obrigatório."); setTimeout(() => cnpjInputRef.current?.focus(), 0); return; }
+    if (!isValidCnpj(digits)) {
+      setCnpjFieldError("CNPJ inválido. Verifique os números informados.");
+      setTimeout(() => cnpjInputRef.current?.focus(), 0);
+      return;
+    }
+    setCnpjFieldError("");
+  }
+
   async function saveClient(event: FormEvent) {
-    event.preventDefault(); setSaving(true); setError("");
+    event.preventDefault(); setError("");
+
+    const cnpjDigits = onlyDigitsCnpj(form.cnpj);
+    if (!cnpjDigits) { setCnpjFieldError("CNPJ é obrigatório."); cnpjInputRef.current?.focus(); return; }
+    if (!isValidCnpj(cnpjDigits)) { setCnpjFieldError("CNPJ inválido. Verifique os números informados."); cnpjInputRef.current?.focus(); return; }
+
+    setSaving(true);
     try {
       const response = await fetch(editingId ? `/api/clientes/${editingId}` : "/api/clientes", {
         method: editingId ? "PUT" : "POST",
@@ -78,9 +105,13 @@ export default function ClientesPage() {
 
   const filteredClients = useMemo(() => {
     const term = search.toLowerCase().trim();
-    if (!term) return clients;
-    return clients.filter(c => [c.name, c.cnpj ?? "", c.segment ?? ""].join(" ").toLowerCase().includes(term));
-  }, [clients, search]);
+    const base = !term ? clients : clients.filter(c => [c.name, c.cnpj ?? "", c.segment ?? ""].join(" ").toLowerCase().includes(term));
+    // Ordem alfabética crescente por nome ou por CNPJ, conforme selecionado (padrão: nome).
+    return [...base].sort((a, b) => {
+      if (sortField === "cnpj") return formatCnpj(a.cnpj).localeCompare(formatCnpj(b.cnpj), "pt-BR", { sensitivity: "base" });
+      return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
+    });
+  }, [clients, search, sortField]);
 
   return (
     <AppShell title="Clientes" subtitle="Cadastro e gestão dos clientes do Projeto MS.">
@@ -95,8 +126,21 @@ export default function ClientesPage() {
           </div>
 
           <form onSubmit={saveClient} className="mt-4 grid gap-4 md:grid-cols-4">
+            <label>
+              <span className="mb-1 block text-sm font-medium">CNPJ *</span>
+              <input
+                ref={cnpjInputRef}
+                required
+                value={form.cnpj}
+                onChange={e => { setForm({ ...form, cnpj: maskCnpj(e.target.value) }); if (cnpjFieldError) setCnpjFieldError(""); }}
+                onBlur={handleCnpjBlur}
+                className={`w-full rounded-md border px-3 py-2 text-sm outline-none ${cnpjFieldError ? "border-red-400 focus:border-red-500" : "border-border focus:border-navy"}`}
+                placeholder="00.000.000/0000-00"
+                aria-invalid={Boolean(cnpjFieldError)}
+              />
+              {cnpjFieldError ? <span className="mt-1 block text-xs text-red-600">{cnpjFieldError}</span> : null}
+            </label>
             <label className="md:col-span-2"><span className="mb-1 block text-sm font-medium">Nome / Razão social *</span><input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-navy" placeholder="Razão social" /></label>
-            <label><span className="mb-1 block text-sm font-medium">CNPJ</span><input value={form.cnpj} onChange={e => setForm({ ...form, cnpj: maskCnpj(e.target.value) })} className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-navy" placeholder="00.000.000/0000-00" /></label>
             <label><span className="mb-1 block text-sm font-medium">Segmento</span><input value={form.segment} onChange={e => setForm({ ...form, segment: e.target.value })} className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-navy" placeholder="Ex.: Indústria" /></label>
             <div className="md:col-span-4 flex justify-end"><button disabled={saving} className="rounded-md bg-navy px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">{saving ? "Salvando..." : editingId ? "Salvar alterações" : "Cadastrar cliente"}</button></div>
           </form>
@@ -107,7 +151,16 @@ export default function ClientesPage() {
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div><CardTitle className="text-base">Clientes cadastrados</CardTitle><p className="mt-1 text-sm text-muted">{filteredClients.length} de {clients.length} cliente(s)</p></div>
-            <input value={search} onChange={e => setSearch(e.target.value)} className="rounded-md border border-border px-3 py-2 text-sm outline-none" placeholder="Buscar cliente..." />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted">Ordenar por</span>
+                <select value={sortField} onChange={e => setSortField(e.target.value as SortField)} className="rounded-md border border-border px-2 py-2 text-sm outline-none">
+                  <option value="name">Nome (A–Z)</option>
+                  <option value="cnpj">CNPJ (crescente)</option>
+                </select>
+              </label>
+              <input value={search} onChange={e => setSearch(e.target.value)} className="rounded-md border border-border px-3 py-2 text-sm outline-none" placeholder="Buscar cliente..." />
+            </div>
           </div>
 
           <div className="mt-4 overflow-x-auto">
