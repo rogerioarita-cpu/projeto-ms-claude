@@ -24,7 +24,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const inconsistency = await prisma.inconsistency.update({
       where: { id: params.id },
       data: { code, description, severity: severity as (typeof validSeverities)[number], projectId, resolved },
-      include: { project: { include: { client: true } } },
+      include: { project: { include: { lead: true } } },
     });
     return NextResponse.json(inconsistency);
   } catch (error) {

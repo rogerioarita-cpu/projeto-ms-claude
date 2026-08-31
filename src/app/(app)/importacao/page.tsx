@@ -5,7 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { SpedCascade } from "@/components/sped/SpedCascade";
-import type { Client, Project, SpedFileItem, SpedFileType } from "@/components/sped/types";
+import type { Lead, Project, SpedFileItem, SpedFileType } from "@/components/sped/types";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const TYPE_OPTIONS: { value: SpedFileType; label: string; accept: string; hint: string }[] = [
@@ -26,11 +26,11 @@ const TYPE_OPTIONS: { value: SpedFileType; label: string; accept: string; hint: 
 export default function ImportacaoSpedPage() {
   const [files, setFiles] = useState<SpedFileItem[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [clientId, setClientId] = useState("");
+  const [leadId, setLeadId] = useState("");
   const [tipo, setTipo] = useState<SpedFileType>("efd_icms_ipi");
   const [projectId, setProjectId] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -44,43 +44,34 @@ export default function ImportacaoSpedPage() {
   async function load() {
     setLoading(true);
     setError("");
-    // Cada recurso é tratado de forma independente: uma falha em um deles
-    // (ex.: /api/sped) não pode impedir que clientes/projetos, que vieram
-    // com sucesso, sejam aplicados na tela.
-    const errors: string[] = [];
+    try {
+      const [filesRes, projectsRes, leadsRes] = await Promise.all([
+        fetch("/api/sped", { cache: "no-store" }),
+        fetch("/api/projetos", { cache: "no-store" }),
+        fetch("/api/leads", { cache: "no-store" }),
+      ]);
+      const filesData = await filesRes.json();
+      if (!filesRes.ok) throw new Error(filesData.error || "Erro ao carregar arquivos importados.");
+      setFiles(filesData);
 
-    const [filesRes, projectsRes, clientsRes] = await Promise.allSettled([
-      fetch("/api/sped", { cache: "no-store" }),
-      fetch("/api/projetos", { cache: "no-store" }),
-      fetch("/api/clientes", { cache: "no-store" }),
-    ]);
+      if (projectsRes.ok) {
+        setProjects(await projectsRes.json());
+      } else {
+        const projectsData = await projectsRes.json().catch(() => null);
+        throw new Error(projectsData?.error || "Erro ao carregar projetos.");
+      }
 
-    if (filesRes.status === "fulfilled") {
-      const data = await filesRes.value.json().catch(() => null);
-      if (filesRes.value.ok && data) setFiles(data);
-      else errors.push(data?.error || "Erro ao carregar arquivos importados.");
-    } else {
-      errors.push("Erro ao carregar arquivos importados.");
+      if (leadsRes.ok) {
+        setLeads(await leadsRes.json());
+      } else {
+        const leadsData = await leadsRes.json().catch(() => null);
+        throw new Error(leadsData?.error || "Erro ao carregar leads.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao carregar dados.");
+    } finally {
+      setLoading(false);
     }
-
-    if (projectsRes.status === "fulfilled") {
-      const data = await projectsRes.value.json().catch(() => null);
-      if (projectsRes.value.ok && data) setProjects(data);
-      else errors.push(data?.error || "Erro ao carregar projetos.");
-    } else {
-      errors.push("Erro ao carregar projetos.");
-    }
-
-    if (clientsRes.status === "fulfilled") {
-      const data = await clientsRes.value.json().catch(() => null);
-      if (clientsRes.value.ok && data) setClients(data);
-      else errors.push(data?.error || "Erro ao carregar clientes.");
-    } else {
-      errors.push("Erro ao carregar clientes.");
-    }
-
-    setError(errors.join(" "));
-    setLoading(false);
   }
   useEffect(() => {
     load();
@@ -99,30 +90,19 @@ export default function ImportacaoSpedPage() {
     if (dropped) setPendingFile(dropped);
   }
 
-  // A lista de projetos só é populada depois que um cliente é escolhido,
-  // e mostra apenas os projetos que pertencem a esse cliente.
-  const projectsForClient = useMemo(
-    () => (clientId ? projects.filter((p) => p.clientId === clientId) : []),
-    [projects, clientId]
+  const sortedLeads = useMemo(
+    () => [...leads].sort((a, b) => a.companyName.localeCompare(b.companyName, "pt-BR")),
+    [leads]
   );
 
-  // Clientes exibidos uma única vez (caso existam registros duplicados no banco,
-  // ex.: mesmo nome/razão social cadastrado mais de uma vez) e em ordem alfabética
-  // crescente por razão social/nome.
-  const sortedClients = useMemo(() => {
-    const seen = new Set<string>();
-    const unique = clients.filter((c) => {
-      const key = c.name.trim().toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    return unique.sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
-  }, [clients]);
+  const projectsForLead = useMemo(
+    () => (leadId ? projects.filter((p) => !p.leadId || p.leadId === leadId) : []),
+    [projects, leadId]
+  );
 
   async function submitUpload() {
-    if (!clientId) {
-      setUploadError("Selecione o cliente antes de importar o arquivo.");
+    if (!leadId) {
+      setUploadError("Selecione o lead antes de importar o arquivo.");
       return;
     }
     if (!pendingFile) {
@@ -134,7 +114,7 @@ export default function ImportacaoSpedPage() {
     try {
       const form = new FormData();
       form.append("file", pendingFile);
-      form.append("clientId", clientId);
+      form.append("leadId", leadId);
       form.append("type", tipo);
       if (projectId) form.append("projectId", projectId);
       const res = await fetch("/api/sped", { method: "POST", body: form });
@@ -199,30 +179,30 @@ export default function ImportacaoSpedPage() {
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             <label>
-              <span className="mb-1 block text-sm font-medium">Cliente *</span>
+              <span className="mb-1 block text-sm font-medium">Lead *</span>
               <select
-                value={clientId}
+                value={leadId}
                 required
                 onChange={(e) => {
-                  const newClientId = e.target.value;
-                  setClientId(newClientId);
-                  // Se o projeto selecionado não pertence mais ao cliente escolhido, limpa a seleção.
+                  const newLeadId = e.target.value;
+                  setLeadId(newLeadId);
+                  // Se o projeto selecionado não pertence mais ao lead escolhido, limpa a seleção.
                   const currentProject = projects.find((p) => p.id === projectId);
-                  if (currentProject?.clientId && currentProject.clientId !== newClientId) {
+                  if (currentProject?.leadId && currentProject.leadId !== newLeadId) {
                     setProjectId("");
                   }
                 }}
                 className="w-full rounded-md border px-3 py-2 text-sm"
               >
-                <option value="">Selecione o cliente</option>
-                {sortedClients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+                <option value="">Selecione o lead</option>
+                {sortedLeads.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.companyName}
                   </option>
                 ))}
               </select>
-              {clients.length === 0 && (
-                <span className="mt-1 block text-xs text-muted">Nenhum cliente cadastrado — cadastre em "Clientes" antes de importar.</span>
+              {leads.length === 0 && (
+                <span className="mt-1 block text-xs text-muted">Nenhum lead cadastrado — cadastre em "Gestão de leads" antes de importar.</span>
               )}
             </label>
             <label>
@@ -230,19 +210,17 @@ export default function ImportacaoSpedPage() {
               <select
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
-                disabled={!clientId}
+                disabled={!leadId}
                 className="w-full rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-muted"
               >
-                <option value="">{clientId ? "Sem projeto vinculado" : "Selecione o cliente primeiro"}</option>
-                {projectsForClient.map((p) => (
+                <option value="">{leadId ? "Sem projeto vinculado" : "Selecione um lead primeiro"}</option>
+                {projectsForLead.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
+                    {p.lead ? ` — ${p.lead.companyName}` : ""}
                   </option>
                 ))}
               </select>
-              {clientId && projectsForClient.length === 0 && (
-                <span className="mt-1 block text-xs text-muted">Este cliente ainda não possui projetos cadastrados.</span>
-              )}
             </label>
             <label>
               <span className="mb-1 block text-sm font-medium">Tipo de arquivo *</span>
@@ -292,7 +270,7 @@ export default function ImportacaoSpedPage() {
           <div className="mt-4 flex items-center gap-3">
             <button
               type="button"
-              disabled={uploading || !pendingFile || !clientId}
+              disabled={uploading || !pendingFile || !leadId}
               onClick={submitUpload}
               className="rounded-md bg-navy px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
@@ -368,7 +346,7 @@ function DetailModal({ item, onClose }: { item: SpedFileItem; onClose: () => voi
         </div>
 
         <dl className="grid grid-cols-2 gap-3 text-sm">
-          <div><dt className="text-xs uppercase text-muted">Cliente</dt><dd>{item.client?.name || item.project?.client?.name || "—"}</dd></div>
+          <div><dt className="text-xs uppercase text-muted">Lead</dt><dd>{item.lead?.companyName || item.project?.lead?.companyName || "—"}</dd></div>
           <div><dt className="text-xs uppercase text-muted">Empresa</dt><dd>{item.companyName || "—"}</dd></div>
           <div><dt className="text-xs uppercase text-muted">CNPJ</dt><dd>{item.cnpj || "—"}</dd></div>
           <div><dt className="text-xs uppercase text-muted">IE / UF</dt><dd>{item.ie || "—"} {item.uf ? `/ ${item.uf}` : ""}</dd></div>

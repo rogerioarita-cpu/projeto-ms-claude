@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function CreditosPage() {
   const credits = await prisma.taxCredit.findMany({
     orderBy: { amount: "desc" },
-    include: { project: { include: { client: true } } },
+    include: { project: { include: { lead: true } } },
   });
 
   const total = credits.reduce((acc, c) => acc + Number(c.amount), 0);
@@ -24,7 +24,7 @@ export default async function CreditosPage() {
               <tr className="border-b border-border text-left text-xs uppercase text-muted">
                 <th className="py-2 pr-4">Tese</th>
                 <th className="py-2 pr-4">Tributo</th>
-                <th className="py-2 pr-4">Projeto / Cliente</th>
+                <th className="py-2 pr-4">Projeto / Lead</th>
                 <th className="py-2 pr-4">Valor</th>
                 <th className="py-2 pr-4">Status</th>
               </tr>
@@ -37,7 +37,7 @@ export default async function CreditosPage() {
                   <td className="py-2 pr-4 text-muted">
                     {c.project?.name}
                     <br />
-                    <span className="text-xs">{c.project?.client?.name}</span>
+                    <span className="text-xs">{c.project?.lead?.companyName}</span>
                   </td>
                   <td className="py-2 pr-4 font-medium tabular-nums">{brl.format(Number(c.amount))}</td>
                   <td className="py-2 pr-4">

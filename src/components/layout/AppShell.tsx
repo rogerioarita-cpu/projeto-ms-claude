@@ -4,7 +4,6 @@ import { SidebarUser } from "./SidebarUser";
 
 const NAV = [
   { href: "/inicio", label: "Início" },
-  { href: "/clientes", label: "Clientes" },
   {
     href: "/leads",
     label: "Gestão de leads",

@@ -7,7 +7,6 @@ export const config = {
   matcher: [
     "/inicio/:path*",
     "/dashboard/:path*",
-    "/clientes/:path*",
     "/projetos/:path*",
     "/leads/:path*",
     "/importacao/:path*",
@@ -19,7 +18,6 @@ export const config = {
     "/analise/:path*",
     "/aprovacoes/:path*",
 
-    "/api/clientes/:path*",
     "/api/projetos/:path*",
     "/api/sped/:path*",
     "/api/auditoria/:path*",

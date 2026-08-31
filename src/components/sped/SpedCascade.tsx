@@ -39,12 +39,12 @@ export function SpedCascade({
   onRemove: (item: SpedFileItem) => void;
 }) {
   const [search, setSearch] = useState("");
-  const [expandedClient, setExpandedClient] = useState<string | null>(null);
+  const [expandedLead, setExpandedLead] = useState<string | null>(null);
   const [expandedType, setExpandedType] = useState<string | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
-  function clientNameOf(f: SpedFileItem) {
-    return f.client?.name || f.project?.client?.name || "Sem cliente vinculado";
+  function leadNameOf(f: SpedFileItem) {
+    return f.lead?.companyName || f.project?.lead?.companyName || "Sem lead vinculado";
   }
 
   const filtered = useMemo(() => {
@@ -53,27 +53,27 @@ export function SpedCascade({
     return files.filter((f) => {
       return (
         !q ||
-        [f.fileName, f.companyName ?? "", clientNameOf(f), f.project?.name ?? ""].join(" ").toLowerCase().includes(q) ||
+        [f.fileName, f.companyName ?? "", leadNameOf(f), f.project?.name ?? ""].join(" ").toLowerCase().includes(q) ||
         (digits.length > 0 && onlyDigits(f.cnpj).includes(digits))
       );
     });
   }, [files, search]);
 
-  // Cascata: Cliente -> Tipo de arquivo -> Importados / Não importados
-  const byClient = useMemo(() => {
+  // Cascata: Lead -> Tipo de arquivo -> Importados / Não importados
+  const byLead = useMemo(() => {
     const groups = new Map<string, SpedFileItem[]>();
     for (const f of filtered) {
-      const name = clientNameOf(f);
+      const name = leadNameOf(f);
       if (!groups.has(name)) groups.set(name, []);
       groups.get(name)!.push(f);
     }
     return Array.from(groups.entries())
       .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
-      .map(([clientName, clientFiles]) => ({
-        clientName,
-        files: clientFiles,
+      .map(([leadName, leadFiles]) => ({
+        leadName,
+        files: leadFiles,
         byType: TYPE_ORDER.map((t) => {
-          const typeFiles = clientFiles.filter((f) => f.type === t.value);
+          const typeFiles = leadFiles.filter((f) => f.type === t.value);
           const importados = typeFiles.filter((f) => isOk(f.status));
           const naoImportados = typeFiles.filter((f) => !isOk(f.status));
           return { ...t, files: typeFiles, importados, naoImportados };
@@ -88,7 +88,7 @@ export function SpedCascade({
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase text-muted">
               <th className="px-5 py-2">Arquivo</th>
-              <th className="px-5 py-2">Cliente</th>
+              <th className="px-5 py-2">Lead</th>
               <th className="px-5 py-2">Empresa / CNPJ</th>
               <th className="px-5 py-2">Período</th>
               <th className="px-5 py-2">Registros</th>
@@ -107,7 +107,7 @@ export function SpedCascade({
                     <br />
                     <span className="text-xs text-muted">{f.fileSizeKb} KB</span>
                   </td>
-                  <td className="px-5 py-2.5">{clientNameOf(f)}</td>
+                  <td className="px-5 py-2.5">{leadNameOf(f)}</td>
                   <td className="px-5 py-2.5">
                     {f.companyName || "—"}
                     <br />
@@ -184,30 +184,30 @@ export function SpedCascade({
         <div className="p-8 text-center text-sm text-muted">Nenhum arquivo encontrado para a busca.</div>
       ) : (
         <div className="divide-y divide-border">
-          {byClient.map((clientGroup) => {
-            const clientIsOpen = expandedClient === clientGroup.clientName;
+          {byLead.map((leadGroup) => {
+            const leadIsOpen = expandedLead === leadGroup.leadName;
             return (
-              <div key={clientGroup.clientName}>
+              <div key={leadGroup.leadName}>
                 <button
                   type="button"
-                  onClick={() => setExpandedClient(clientIsOpen ? null : clientGroup.clientName)}
+                  onClick={() => setExpandedLead(leadIsOpen ? null : leadGroup.leadName)}
                   className={`flex w-full items-center justify-between gap-3 px-5 py-3 text-left transition-colors ${
-                    clientIsOpen ? "bg-navy/5" : "hover:bg-gray-50"
+                    leadIsOpen ? "bg-navy/5" : "hover:bg-gray-50"
                   }`}
-                  aria-expanded={clientIsOpen}
+                  aria-expanded={leadIsOpen}
                 >
-                  <span className="text-sm font-semibold text-navy">{clientGroup.clientName}</span>
+                  <span className="text-sm font-semibold text-navy">{leadGroup.leadName}</span>
                   <div className="flex flex-shrink-0 items-center gap-3">
-                    <span className="text-xs text-muted">{clientGroup.files.length} arquivo(s)</span>
-                    <ChevronIcon open={clientIsOpen} />
+                    <span className="text-xs text-muted">{leadGroup.files.length} arquivo(s)</span>
+                    <ChevronIcon open={leadIsOpen} />
                   </div>
                 </button>
 
-                {clientIsOpen && (
+                {leadIsOpen && (
                   <div className="bg-gray-50/40">
                     <div className="flex flex-wrap gap-2 border-y border-border px-5 py-3 pl-8">
-                      {clientGroup.byType.map((t) => {
-                        const typeKey = `${clientGroup.clientName}::${t.value}`;
+                      {leadGroup.byType.map((t) => {
+                        const typeKey = `${leadGroup.leadName}::${t.value}`;
                         if (t.files.length === 0) {
                           return (
                             <div key={typeKey} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 opacity-40">
@@ -235,8 +235,8 @@ export function SpedCascade({
                       })}
                     </div>
 
-                    {clientGroup.byType.map((t) => {
-                      const typeKey = `${clientGroup.clientName}::${t.value}`;
+                    {leadGroup.byType.map((t) => {
+                      const typeKey = `${leadGroup.leadName}::${t.value}`;
                       if (expandedType !== typeKey) return null;
                       return (
                         <div key={typeKey} className="divide-y divide-border">

@@ -19,7 +19,7 @@ function parseDate(value: unknown) {
 
 function parsePayload(body: any) {
   const name = String(body.name ?? "").trim();
-  const clientId = body.clientId ? String(body.clientId) : null;
+  const leadId = body.leadId ? String(body.leadId) : null;
   const status = String(body.status ?? "planejamento");
   const periodStart = parseDate(body.periodStart);
   const periodEnd = parseDate(body.periodEnd);
@@ -32,7 +32,7 @@ function parsePayload(body: any) {
   if (body.prescriptionDate && !prescriptionDate) throw new Error("Data de prescrição inválida.");
   if (periodStart && periodEnd && periodStart > periodEnd) throw new Error("A data inicial não pode ser posterior à data final.");
 
-  return { name, clientId, status: status as (typeof validStatuses)[number], periodStart, periodEnd, prescriptionDate };
+  return { name, leadId, status: status as (typeof validStatuses)[number], periodStart, periodEnd, prescriptionDate };
 }
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
@@ -43,15 +43,15 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const existing = await prisma.project.findUnique({ where: { id: params.id } });
     if (!existing) return NextResponse.json({ error: "Projeto não encontrado." }, { status: 404 });
 
-    if (data.clientId) {
-      const client = await prisma.client.findUnique({ where: { id: data.clientId } });
-      if (!client) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
+    if (data.leadId) {
+      const lead = await prisma.lead.findUnique({ where: { id: data.leadId } });
+      if (!lead) return NextResponse.json({ error: "Lead não encontrado." }, { status: 400 });
     }
 
     const project = await prisma.project.update({
       where: { id: params.id },
       data,
-      include: { client: true },
+      include: { lead: true },
     });
 
     return NextResponse.json(project);

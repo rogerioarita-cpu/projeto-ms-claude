@@ -14,13 +14,13 @@ const statuses = [
   ["concluido", "Concluído"],
 ] as const;
 
-type Client = { id: string; name: string };
+type Lead = { id: string; companyName: string };
 type Project = {
   id: string;
   name: string;
   status: string;
-  clientId: string | null;
-  client: Client | null;
+  leadId: string | null;
+  lead: Lead | null;
   periodStart: string | null;
   periodEnd: string | null;
   prescriptionDate: string | null;
@@ -29,7 +29,7 @@ type Project = {
 
 type FormData = {
   name: string;
-  clientId: string;
+  leadId: string;
   status: string;
   periodStart: string;
   periodEnd: string;
@@ -38,7 +38,7 @@ type FormData = {
 
 const emptyForm: FormData = {
   name: "",
-  clientId: "",
+  leadId: "",
   status: "planejamento",
   periodStart: "",
   periodEnd: "",
@@ -56,7 +56,7 @@ function dateValue(value: string | null) {
 
 export default function ProjetosPage() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -69,16 +69,16 @@ export default function ProjetosPage() {
     setLoading(true);
     setError("");
     try {
-      const [projectsResponse, clientsResponse] = await Promise.all([
+      const [projectsResponse, leadsResponse] = await Promise.all([
         fetch("/api/projetos", { cache: "no-store" }),
-        fetch("/api/clientes", { cache: "no-store" }),
+        fetch("/api/leads", { cache: "no-store" }),
       ]);
       const projectsData = await projectsResponse.json();
-      const clientsData = await clientsResponse.json();
+      const leadsData = await leadsResponse.json();
       if (!projectsResponse.ok) throw new Error(projectsData.error || "Erro ao carregar projetos.");
-      if (!clientsResponse.ok) throw new Error(clientsData.error || "Erro ao carregar clientes.");
+      if (!leadsResponse.ok) throw new Error(leadsData.error || "Erro ao carregar leads.");
       setProjects(projectsData);
-      setClients(clientsData);
+      setLeads(leadsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
     } finally {
@@ -97,7 +97,7 @@ export default function ProjetosPage() {
     setEditingId(project.id);
     setForm({
       name: project.name,
-      clientId: project.clientId ?? "",
+      leadId: project.leadId ?? "",
       status: project.status,
       periodStart: project.periodStart ? project.periodStart.slice(0, 10) : "",
       periodEnd: project.periodEnd ? project.periodEnd.slice(0, 10) : "",
@@ -141,9 +141,14 @@ export default function ProjetosPage() {
     }
   }
 
+  const sortedLeads = useMemo(
+    () => [...leads].sort((a, b) => a.companyName.localeCompare(b.companyName, "pt-BR")),
+    [leads]
+  );
+
   const filteredProjects = useMemo(() => projects.filter((project) => {
     const term = search.toLowerCase().trim();
-    const matchesSearch = !term || [project.name, project.client?.name ?? "", labelStatus(project.status)].join(" ").toLowerCase().includes(term);
+    const matchesSearch = !term || [project.name, project.lead?.companyName ?? "", labelStatus(project.status)].join(" ").toLowerCase().includes(term);
     const matchesStatus = !statusFilter || project.status === statusFilter;
     return matchesSearch && matchesStatus;
   }), [projects, search, statusFilter]);
@@ -155,7 +160,7 @@ export default function ProjetosPage() {
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-navy">{editingId ? "Editar projeto" : "Novo projeto"}</h2>
-              <p className="text-sm text-muted">Vincule o projeto a um cliente e acompanhe sua etapa.</p>
+              <p className="text-sm text-muted">Vincule o projeto a um lead e acompanhe sua etapa.</p>
             </div>
             {editingId ? <button type="button" onClick={resetForm} className="rounded-md border border-border px-4 py-2 text-sm">Cancelar</button> : null}
           </div>
@@ -166,10 +171,10 @@ export default function ProjetosPage() {
               <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-md border border-border px-3 py-2" placeholder="Ex.: Auditoria fiscal 2024" />
             </label>
             <label>
-              <span className="mb-1 block text-sm font-medium">Cliente</span>
-              <select value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })} className="w-full rounded-md border border-border px-3 py-2">
-                <option value="">Sem cliente</option>
-                {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+              <span className="mb-1 block text-sm font-medium">Lead</span>
+              <select value={form.leadId} onChange={(e) => setForm({ ...form, leadId: e.target.value })} className="w-full rounded-md border border-border px-3 py-2">
+                <option value="">Sem lead</option>
+                {sortedLeads.map((lead) => <option key={lead.id} value={lead.id}>{lead.companyName}</option>)}
               </select>
             </label>
             <label>
@@ -207,7 +212,7 @@ export default function ProjetosPage() {
               <p className="text-sm text-muted">{filteredProjects.length} projeto(s) exibido(s).</p>
             </div>
             <div className="flex gap-2">
-              <input value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-md border border-border px-3 py-2 text-sm" placeholder="Buscar projeto ou cliente..." />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-md border border-border px-3 py-2 text-sm" placeholder="Buscar projeto ou lead..." />
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-md border border-border px-3 py-2 text-sm">
                 <option value="">Todos os status</option>
                 {statuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -220,14 +225,14 @@ export default function ProjetosPage() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-border bg-slate-50">
                   <tr>
-                    <th className="px-5 py-3">Projeto</th><th className="px-5 py-3">Cliente</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Período</th><th className="px-5 py-3">Prescrição</th><th className="px-5 py-3">Vínculos</th><th className="px-5 py-3 text-right">Ações</th>
+                    <th className="px-5 py-3">Projeto</th><th className="px-5 py-3">Lead</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Período</th><th className="px-5 py-3">Prescrição</th><th className="px-5 py-3">Vínculos</th><th className="px-5 py-3 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredProjects.map((project) => (
                     <tr key={project.id} className="border-b border-border last:border-0">
                       <td className="px-5 py-4 font-medium text-navy">{project.name}</td>
-                      <td className="px-5 py-4 text-muted">{project.client?.name ?? "—"}</td>
+                      <td className="px-5 py-4 text-muted">{project.lead?.companyName ?? "—"}</td>
                       <td className="px-5 py-4"><Badge value={project.status} /></td>
                       <td className="px-5 py-4 text-muted">{dateValue(project.periodStart)} – {dateValue(project.periodEnd)}</td>
                       <td className="px-5 py-4 text-muted">{dateValue(project.prescriptionDate)}</td>

@@ -19,7 +19,7 @@ function parseDate(value: unknown) {
 
 function parsePayload(body: any) {
   const name = String(body.name ?? "").trim();
-  const clientId = body.clientId ? String(body.clientId) : null;
+  const leadId = body.leadId ? String(body.leadId) : null;
   const status = String(body.status ?? "planejamento");
   const periodStart = parseDate(body.periodStart);
   const periodEnd = parseDate(body.periodEnd);
@@ -36,7 +36,7 @@ function parsePayload(body: any) {
     throw new Error("A data inicial não pode ser posterior à data final.");
   }
 
-  return { name, clientId, status: status as (typeof validStatuses)[number], periodStart, periodEnd, prescriptionDate };
+  return { name, leadId, status: status as (typeof validStatuses)[number], periodStart, periodEnd, prescriptionDate };
 }
 
 export async function GET() {
@@ -44,7 +44,7 @@ export async function GET() {
     const projects = await prisma.project.findMany({
       orderBy: { createdAt: "desc" },
       include: {
-        client: true,
+        lead: true,
         _count: { select: { documents: true, inconsistencies: true, taxCredits: true } },
       },
     });
@@ -61,14 +61,14 @@ export async function POST(request: Request) {
     const body = await request.json();
     const data = parsePayload(body);
 
-    if (data.clientId) {
-      const client = await prisma.client.findUnique({ where: { id: data.clientId } });
-      if (!client) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
+    if (data.leadId) {
+      const lead = await prisma.lead.findUnique({ where: { id: data.leadId } });
+      if (!lead) return NextResponse.json({ error: "Lead não encontrado." }, { status: 400 });
     }
 
     const project = await prisma.project.create({
       data,
-      include: { client: true },
+      include: { lead: true },
     });
 
     return NextResponse.json(project, { status: 201 });

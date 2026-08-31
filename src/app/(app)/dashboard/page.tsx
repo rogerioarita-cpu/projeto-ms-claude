@@ -40,12 +40,12 @@ async function getData(leadScope?: string) {
       where: { prescriptionDate: { not: null } },
       orderBy: { prescriptionDate: "asc" },
       take: 5,
-      include: { client: true },
+      include: { lead: true },
     }),
     prisma.taxCredit.findMany({
       orderBy: { amount: "desc" },
       take: 5,
-      include: { project: { include: { client: true } } },
+      include: { project: { include: { lead: true } } },
     }),
     prisma.inconsistency.count({ where: { resolved: false } }),
   ]);
@@ -150,7 +150,7 @@ export default async function DashboardPage() {
                     <div key={p.id} className="flex items-center justify-between rounded-md border border-border p-3">
                       <div>
                         <p className="text-sm font-medium">{p.name}</p>
-                        <p className="text-xs text-muted">{p.client?.name}</p>
+                        <p className="text-xs text-muted">{p.lead?.companyName}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-medium">{p.prescriptionDate ? dateFmt.format(p.prescriptionDate) : "—"}</p>
@@ -173,7 +173,7 @@ export default async function DashboardPage() {
                   <div key={c.id} className="flex items-center justify-between rounded-md border border-border p-3">
                     <div>
                       <p className="text-sm font-medium">{c.thesis ?? c.taxType}</p>
-                      <p className="text-xs text-muted">{c.project?.client?.name}</p>
+                      <p className="text-xs text-muted">{c.project?.lead?.companyName}</p>
                     </div>
                     <p className="text-sm font-medium tabular-nums text-navy">{brl.format(Number(c.amount))}</p>
                   </div>

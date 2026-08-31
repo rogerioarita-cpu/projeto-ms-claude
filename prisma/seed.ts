@@ -30,22 +30,19 @@ async function main() {
     },
   });
 
-  // Não há unique constraint em Client.name/cnpj no schema, então usamos
-  // findFirst + create (em vez de `create` direto) para evitar cadastrar o
-  // mesmo cliente de novo toda vez que o seed é executado.
-  async function upsertClientByName(data: { name: string; cnpj: string; segment: string }) {
-    const existing = await prisma.client.findFirst({ where: { name: data.name } });
-    if (existing) return existing;
-    return prisma.client.create({ data });
-  }
-
-  const auroraClient = await upsertClientByName({ name: "Indústria Aurora S/A", cnpj: "12.345.678/0001-90", segment: "Indústria" });
-  const valeNorteClient = await upsertClientByName({ name: "Distribuidora Vale Norte", cnpj: "98.765.432/0001-10", segment: "Atacado" });
-  const tecnoClient = await upsertClientByName({ name: "TecnoServiços Ltda", cnpj: "45.678.912/0001-55", segment: "Serviços" });
+  const auroraLead = await prisma.lead.create({
+    data: { companyName: "Indústria Aurora S/A", cnpj: "12.345.678/0001-90", companyType: "industria", status: "aprovado" },
+  });
+  const valeNorteLead = await prisma.lead.create({
+    data: { companyName: "Distribuidora Vale Norte", cnpj: "98.765.432/0001-10", companyType: "revenda", status: "aprovado" },
+  });
+  const tecnoLead = await prisma.lead.create({
+    data: { companyName: "TecnoServiços Ltda", cnpj: "45.678.912/0001-55", companyType: "servicos", status: "aprovado" },
+  });
 
   const projAurora = await prisma.project.create({
     data: {
-      clientId: auroraClient.id,
+      leadId: auroraLead.id,
       name: "Auditoria EFD Contribuições 2021-2024",
       status: "auditoria",
       periodStart: new Date("2021-01-01"),
@@ -55,7 +52,7 @@ async function main() {
   });
   const projVale = await prisma.project.create({
     data: {
-      clientId: valeNorteClient.id,
+      leadId: valeNorteLead.id,
       name: "Recuperação ICMS-ST",
       status: "analise",
       periodStart: new Date("2022-01-01"),
@@ -65,7 +62,7 @@ async function main() {
   });
   const projTecno = await prisma.project.create({
     data: {
-      clientId: tecnoClient.id,
+      leadId: tecnoLead.id,
       name: "Diagnóstico PIS/COFINS",
       status: "importacao",
       periodStart: new Date("2023-01-01"),

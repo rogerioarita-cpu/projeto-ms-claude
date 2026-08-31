@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const inconsistencies = await prisma.inconsistency.findMany({
       orderBy: [{ resolved: "asc" }, { severity: "desc" }, { createdAt: "desc" }],
-      include: { project: { include: { client: true } } },
+      include: { project: { include: { lead: true } } },
     });
     return NextResponse.json(inconsistencies);
   } catch (error) {
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
     const inconsistency = await prisma.inconsistency.create({
       data: { code, description, severity: severity as "baixa" | "media" | "alta" | "critica", projectId },
-      include: { project: { include: { client: true } } },
+      include: { project: { include: { lead: true } } },
     });
     return NextResponse.json(inconsistency, { status: 201 });
   } catch (error) {

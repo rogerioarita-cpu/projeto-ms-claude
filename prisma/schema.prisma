@@ -111,20 +111,6 @@ model VerificationToken {
 // DOMÍNIO DO PRODUTO
 // ---------------------------------------------------------------------
 
-model Client {
-  id        String   @id @default(cuid())
-  name      String
-  cnpj      String?
-  segment   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  projects  Project[]
-  spedFiles SpedFile[]
-
-  @@map("clients")
-}
-
 // LeadStatus e CompanyType (ver adiante) alinhados ao PRD seção 6.3/7.1 —
 // substituem o antigo enum LeadStage do MVP inicial.
 
@@ -173,6 +159,8 @@ model Lead {
   documents   Document[]
   analises    AnaliseFiscal[]
   approvals   Aprovacao[]
+  projects    Project[]
+  spedFiles   SpedFile[]
 
   @@map("leads")
 }
@@ -189,8 +177,8 @@ enum ProjectStatus {
 
 model Project {
   id                String        @id @default(cuid())
-  clientId          String?
-  client            Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  leadId            String?
+  lead              Lead?         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   name              String
   status            ProjectStatus @default(planejamento)
   periodStart       DateTime?
@@ -315,8 +303,8 @@ enum SpedFileStatus {
 
 model SpedFile {
   id        String       @id @default(cuid())
-  clientId  String
-  client    Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  leadId    String
+  lead      Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   projectId String?
   project   Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   type      SpedFileType
@@ -351,7 +339,7 @@ model SpedFile {
   duplicateOfId String?
 
   @@index([projectId])
-  @@index([clientId])
+  @@index([leadId])
   @@index([type])
   @@map("sped_files")
 }

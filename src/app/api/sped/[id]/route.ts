@@ -6,8 +6,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     const spedFile = await prisma.spedFile.findUnique({
       where: { id: params.id },
       include: {
-        client: true,
-        project: { include: { client: true } },
+        lead: true,
+        project: { include: { lead: true } },
         uploadedBy: true,
       },
     });
