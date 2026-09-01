@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { prisma } from "@/lib/prisma";
 import { WorkflowAccordion, type WorkflowItem } from "@/components/workflow/WorkflowAccordion";
+import { getLeadScopeFilter } from "@/server/session-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,9 @@ function onlyDigits(v: string | null) {
 }
 
 export default async function WorkflowPage() {
+  const leadScope = await getLeadScopeFilter();
   const leads = await prisma.lead.findMany({
+    where: leadScope ? { id: leadScope } : undefined,
     orderBy: { createdAt: "desc" },
   });
   const spedFiles = await prisma.spedFile.findMany({ select: { cnpj: true } });
@@ -37,6 +40,7 @@ export default async function WorkflowPage() {
   const documents = await prisma.document.findMany({
     where: {
       type: { in: TRACKED_DOC_TYPES.map((t) => t.value) },
+      ...(leadScope ? { leadId: leadScope } : {}),
     },
     select: { leadId: true, type: true, status: true, version: true },
   });

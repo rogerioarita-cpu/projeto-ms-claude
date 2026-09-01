@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getLeadScopeFilter, isReadOnlySession } from "@/server/session-scope";
 
 const TAX_TYPES = ["pis_cofins", "icms", "ipi", "irpj_csll", "outros"] as const;
 const STATUSES = ["em_andamento", "concluida", "aprovada", "rejeitada"] as const;
 
 export async function GET() {
   try {
+    const leadScope = await getLeadScopeFilter();
     const analises = await prisma.analiseFiscal.findMany({
+      where: leadScope ? { leadId: leadScope } : undefined,
       orderBy: { createdAt: "desc" },
       include: { lead: true, analyst: true, checklist: { orderBy: { order: "asc" } }, approvals: true },
     });
@@ -19,6 +22,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (await isReadOnlySession()) {
+      return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
+    }
+
     const body = await request.json();
     const leadId = String(body.leadId ?? "");
     const taxType = String(body.taxType ?? "");

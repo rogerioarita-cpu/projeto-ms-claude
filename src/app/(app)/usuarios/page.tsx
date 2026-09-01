@@ -4,7 +4,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { DeleteUserButton } from "@/components/users/DeleteUserButton";
 import { UserStatusSelect } from "@/components/users/UserStatusSelect";
-import { ROLE_LABELS, ROLE_VALUES, type RoleValue } from "@/lib/role-options";
+import { UserFilters } from "@/components/users/UserFilters";
+import { ROLE_LABELS, type RoleValue } from "@/lib/role-options";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/server/require-admin";
 import { dateFmt } from "@/lib/format";
@@ -21,7 +22,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
 
   const allUsers = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
-    include: { roles: true },
+    include: { roles: true, linkedLead: true },
   });
 
   const users = allUsers.filter((u) => {
@@ -58,22 +59,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="text-base">{users.length} de {allUsers.length} usuários</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
-              <form method="get" className="flex flex-wrap gap-2">
-                <select name="role" defaultValue={roleFilter} className="rounded-md border px-2 py-1.5 text-xs" onChange={(e) => e.currentTarget.form?.submit()}>
-                  <option value="">Todos os papéis</option>
-                  {ROLE_VALUES.map((r) => (
-                    <option key={r} value={r}>
-                      {ROLE_LABELS[r]}
-                    </option>
-                  ))}
-                </select>
-                <select name="status" defaultValue={statusFilter} className="rounded-md border px-2 py-1.5 text-xs" onChange={(e) => e.currentTarget.form?.submit()}>
-                  <option value="">Todos os status</option>
-                  <option value="ativo">Ativo</option>
-                  <option value="inativo">Inativo</option>
-                  <option value="bloqueado">Bloqueado</option>
-                </select>
-              </form>
+              <UserFilters roleFilter={roleFilter} statusFilter={statusFilter} />
               <Link href="/usuarios/novo" className="rounded-md bg-navy px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
                 + Novo usuário
               </Link>
@@ -87,6 +73,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
                   <th className="py-2 pr-4">Nome</th>
                   <th className="py-2 pr-4">E-mail</th>
                   <th className="py-2 pr-4">Papéis</th>
+                  <th className="py-2 pr-4">Lead/Cliente vinculado</th>
                   <th className="py-2 pr-4">Status</th>
                   <th className="py-2 pr-4">Último acesso</th>
                   <th className="py-2 pr-4">Ações</th>
@@ -109,12 +96,14 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
                         ))}
                       </div>
                     </td>
+                    <td className="py-2 pr-4 text-muted">{u.linkedLead?.companyName || "—"}</td>
                     <td className="py-2 pr-4">
                       <UserStatusSelect
                         userId={u.id}
                         name={u.name}
                         email={u.email}
                         roles={u.roles.map((r) => r.role as RoleValue)}
+                        linkedLeadId={u.linkedLeadId}
                         status={u.status}
                         disabled={u.id === currentUserId}
                       />
@@ -136,8 +125,9 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
         </Card>
 
         <p className="text-xs text-muted">
-          RBAC: cada usuário pode ter mais de um papel (Administrador, Gestor, Analista Fiscal, Jurídico, Comercial,
-          Aprovador), com acesso conforme sua função no fluxo de análise e aprovação.
+          RBAC: cada usuário pode ter mais de um papel. O perfil <strong>Lead/Cliente</strong> só permite consultar os
+          dados do Lead/Cliente vinculado; os demais perfis (Administrador, Gestor, Analista Fiscal, Jurídico,
+          Comercial, Aprovador) têm acesso conforme sua função no fluxo de análise e aprovação.
         </p>
       </div>
     </AppShell>

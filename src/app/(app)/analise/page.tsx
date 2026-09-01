@@ -5,7 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
 
-type Lead = { id: string; companyName: string };
+type Lead = { id: string; companyName: string; isClient?: boolean };
 type UserOption = { id: string; name: string | null; email: string };
 type TaxType = "pis_cofins" | "icms" | "ipi" | "irpj_csll" | "outros";
 type AnaliseStatus = "em_andamento" | "concluida" | "aprovada" | "rejeitada";
@@ -81,6 +81,7 @@ export default function AnaliseFiscalPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [onlyClientLeads, setOnlyClientLeads] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -195,6 +196,14 @@ export default function AnaliseFiscalPage() {
     return { ativas: ativas.length, emAndamento, creditoTotal };
   }, [analises]);
 
+  const leadOptions = useMemo(
+    () =>
+      [...leads]
+        .filter((l) => !onlyClientLeads || l.isClient)
+        .sort((a, b) => a.companyName.localeCompare(b.companyName, "pt-BR")),
+    [leads, onlyClientLeads]
+  );
+
   return (
     <AppShell title="Análise fiscal" subtitle="Teses tributárias, diagnóstico e checklist de validação por lead.">
       <div className="space-y-6">
@@ -209,10 +218,30 @@ export default function AnaliseFiscalPage() {
           </div>
           <form onSubmit={submit} className="grid gap-4 md:grid-cols-4">
             <label>
-              <span className="mb-1 block text-sm font-medium">Lead *</span>
+              <span className="mb-1 flex items-center justify-between text-sm font-medium">
+                <span>Lead/clientes *</span>
+                <span className="flex items-center gap-1 text-sm font-bold" title="Mostrar apenas leads marcados como cliente.">
+                  <input
+                    type="checkbox"
+                    checked={onlyClientLeads}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setOnlyClientLeads(checked);
+                      // Se o lead selecionado não for cliente, limpa a seleção ao ativar o filtro.
+                      if (checked) {
+                        const currentLead = leads.find((l) => l.id === form.leadId);
+                        if (currentLead && !currentLead.isClient) {
+                          setForm({ ...form, leadId: "" });
+                        }
+                      }
+                    }}
+                  />
+                  Cliente
+                </span>
+              </span>
               <select value={form.leadId} onChange={(e) => setForm({ ...form, leadId: e.target.value })} className="w-full rounded-md border px-3 py-2 text-sm">
-                <option value="">Selecione</option>
-                {leads.map((l) => (
+                <option value="">Selecione o lead/cliente</option>
+                {leadOptions.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.companyName}
                   </option>

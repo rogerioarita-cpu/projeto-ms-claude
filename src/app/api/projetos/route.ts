@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isReadOnlySession, getLeadScopeFilter } from "@/server/session-scope";
 
 const validStatuses = [
   "planejamento",
@@ -41,7 +42,9 @@ function parsePayload(body: any) {
 
 export async function GET() {
   try {
+    const leadScope = await getLeadScopeFilter();
     const projects = await prisma.project.findMany({
+      where: leadScope ? { leadId: leadScope } : undefined,
       orderBy: { createdAt: "desc" },
       include: {
         lead: true,
@@ -58,6 +61,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (await isReadOnlySession()) {
+      return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
+    }
+
     const body = await request.json();
     const data = parsePayload(body);
 

@@ -1,5 +1,5 @@
 export type Project = { id: string; name: string; leadId?: string | null; lead?: { companyName: string } | null };
-export type Lead = { id: string; companyName: string };
+export type Lead = { id: string; companyName: string; isClient?: boolean };
 
 export type SpedIssue = { linha: number; registro: string; mensagem: string };
 

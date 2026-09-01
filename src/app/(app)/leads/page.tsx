@@ -30,8 +30,22 @@ type Lead = {
   estimatedValue: string | number;
   procurationSigned: boolean;
   ndaSigned: boolean;
+  isClient: boolean;
+  addressZip: string | null;
+  addressStreet: string | null;
+  addressNumber: string | null;
+  addressComplement: string | null;
+  addressNeighborhood: string | null;
+  addressCity: string | null;
+  addressState: string | null;
   notes: string | null;
   createdAt: string;
+  clientFlagLogs?: {
+    id: string;
+    value: boolean;
+    changedAt: string;
+    changedBy: { name: string | null; email: string } | null;
+  }[];
 };
 
 const STATUS_OPTIONS: { key: LeadStatus; label: string }[] = [
@@ -53,6 +67,11 @@ const COMPANY_TYPES: { value: CompanyType; label: string }[] = [
   { value: "servicos", label: "Serviços" },
 ];
 
+const UF_OPTIONS = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
+  "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+];
+
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 type FormData = {
@@ -66,6 +85,14 @@ type FormData = {
   estimatedValue: string;
   procurationSigned: boolean;
   ndaSigned: boolean;
+  isClient: boolean;
+  addressZip: string;
+  addressStreet: string;
+  addressNumber: string;
+  addressComplement: string;
+  addressNeighborhood: string;
+  addressCity: string;
+  addressState: string;
   notes: string;
 };
 
@@ -80,8 +107,22 @@ const emptyForm: FormData = {
   estimatedValue: "",
   procurationSigned: false,
   ndaSigned: false,
+  isClient: false,
+  addressZip: "",
+  addressStreet: "",
+  addressNumber: "",
+  addressComplement: "",
+  addressNeighborhood: "",
+  addressCity: "",
+  addressState: "",
   notes: "",
 };
+
+function formatCep(digits: string) {
+  const d = digits.replace(/\D/g, "").slice(0, 8);
+  if (d.length <= 5) return d;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
+}
 
 function formatCnpj(digits: string) {
   const d = digits.replace(/\D/g, "").slice(0, 14);
@@ -105,7 +146,9 @@ export default function LeadsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [onlyClients, setOnlyClients] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [formTab, setFormTab] = useState<"geral" | "endereco">("geral");
 
   async function load() {
     setLoading(true);
@@ -129,6 +172,7 @@ export default function LeadsPage() {
     setForm(emptyForm);
     setEditingId(null);
     setFieldErrors({});
+    setFormTab("geral");
   }
   function edit(lead: Lead) {
     setEditingId(lead.id);
@@ -143,9 +187,18 @@ export default function LeadsPage() {
       estimatedValue: String(lead.estimatedValue ?? ""),
       procurationSigned: lead.procurationSigned,
       ndaSigned: lead.ndaSigned,
+      isClient: lead.isClient,
+      addressZip: lead.addressZip ? formatCep(lead.addressZip) : "",
+      addressStreet: lead.addressStreet ?? "",
+      addressNumber: lead.addressNumber ?? "",
+      addressComplement: lead.addressComplement ?? "",
+      addressNeighborhood: lead.addressNeighborhood ?? "",
+      addressCity: lead.addressCity ?? "",
+      addressState: lead.addressState ?? "",
       notes: lead.notes ?? "",
     });
     setFieldErrors({});
+    setFormTab("geral");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -158,7 +211,14 @@ export default function LeadsPage() {
     if (form.estimatedValue && (Number.isNaN(Number(form.estimatedValue)) || Number(form.estimatedValue) < 0)) {
       errs.estimatedValue = "Informe um valor numérico válido.";
     }
+    const cepDigits = form.addressZip.replace(/\D/g, "");
+    if (form.addressZip && cepDigits.length !== 8) errs.addressZip = "O CEP deve ter 8 dígitos.";
     setFieldErrors(errs);
+    if (errs.addressZip && !errs.companyName && !errs.cnpj && !errs.contactEmail && !errs.estimatedValue) {
+      setFormTab("endereco");
+    } else if (Object.keys(errs).some((k) => k !== "addressZip")) {
+      setFormTab("geral");
+    }
     return Object.keys(errs).length === 0;
   }
 
@@ -171,7 +231,7 @@ export default function LeadsPage() {
       const res = await fetch(editingId ? `/api/leads/${editingId}` : "/api/leads", {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, cnpj: form.cnpj.replace(/\D/g, "") || null, companyType: form.companyType || null }),
+        body: JSON.stringify({ ...form, cnpj: form.cnpj.replace(/\D/g, "") || null, companyType: form.companyType || null, addressZip: form.addressZip.replace(/\D/g, "") || null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Não foi possível salvar o lead.");
@@ -214,6 +274,14 @@ export default function LeadsPage() {
           estimatedValue: lead.estimatedValue,
           procurationSigned: lead.procurationSigned,
           ndaSigned: lead.ndaSigned,
+          isClient: lead.isClient,
+          addressZip: lead.addressZip,
+          addressStreet: lead.addressStreet,
+          addressNumber: lead.addressNumber,
+          addressComplement: lead.addressComplement,
+          addressNeighborhood: lead.addressNeighborhood,
+          addressCity: lead.addressCity,
+          addressState: lead.addressState,
           notes: lead.notes,
         }),
       });
@@ -227,26 +295,34 @@ export default function LeadsPage() {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    const list = !q
+    let list = !q
       ? leads
       : leads.filter((l) => [l.companyName, l.cnpj ?? "", l.contactName ?? "", l.contactEmail ?? ""].join(" ").toLowerCase().includes(q));
+    if (onlyClients) list = list.filter((l) => l.isClient === true);
     return list.slice().sort((a, b) => a.companyName.localeCompare(b.companyName, "pt-BR"));
-  }, [leads, search]);
+  }, [leads, search, onlyClients]);
 
   const kpis = useMemo(() => {
     const ativos = leads.filter((l) => l.status !== "aprovado" && l.status !== "cancelado").length;
     const comProcuracao = leads.filter((l) => l.procurationSigned).length;
     const semNda = leads.filter((l) => !l.ndaSigned).length;
-    return { ativos, comProcuracao, semNda };
+    const clientes = leads.filter((l) => l.isClient).length;
+    return { ativos, comProcuracao, semNda, clientes };
   }, [leads]);
 
+  const editingLead = editingId ? leads.find((l) => l.id === editingId) ?? null : null;
+  const clientFlagHistory = editingLead?.clientFlagLogs ?? [];
+  // "Cliente" não é editável manualmente: reflete o valor atual do lead (ou fica
+  // marcado se o status selecionado no formulário já for "Contrato").
+  const willBeClient = (editingLead?.isClient ?? false) || form.status === "contrato" || form.status === "aprovado";
+
   return (
-    <AppShell title="Gestão de leads" subtitle="Cadastro, qualificação e acompanhamento do pipeline até a aprovação final.">
+    <AppShell title="Gestão de Leads/Clientes" subtitle="Cadastro, qualificação e acompanhamento do pipeline até a aprovação final.">
       <div className="space-y-6">
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">{editingId ? "Editar lead" : "Novo lead"}</CardTitle>
+              <CardTitle className="text-base">{editingId ? "Editar lead/cliente" : "Novo lead/cliente"}</CardTitle>
               <p className="text-sm text-muted">Razão social, CNPJ, tipo de empresa, responsável, e-mail e telefone.</p>
             </div>
             {editingId && (
@@ -255,92 +331,182 @@ export default function LeadsPage() {
               </button>
             )}
           </div>
-          <form onSubmit={submit} className="grid gap-4 md:grid-cols-4">
-            <label className="md:col-span-2">
-              <span className="mb-1 block text-sm font-medium">Razão social *</span>
-              <input
-                value={form.companyName}
-                onChange={(e) => setForm({ ...form, companyName: e.target.value })}
-                className={`w-full rounded-md border px-3 py-2 ${fieldErrors.companyName ? "border-red-400" : ""}`}
-                placeholder="Ex.: Metalúrgica Sul Ltda"
-              />
-              {fieldErrors.companyName && <span className="mt-1 block text-xs text-red-600">{fieldErrors.companyName}</span>}
-            </label>
-            <label>
-              <span className="mb-1 block text-sm font-medium">CNPJ</span>
-              <input
-                value={form.cnpj}
-                onChange={(e) => setForm({ ...form, cnpj: formatCnpj(e.target.value) })}
-                className={`w-full rounded-md border px-3 py-2 ${fieldErrors.cnpj ? "border-red-400" : ""}`}
-                placeholder="00.000.000/0000-00"
-                maxLength={18}
-              />
-              {fieldErrors.cnpj && <span className="mt-1 block text-xs text-red-600">{fieldErrors.cnpj}</span>}
-            </label>
-            <label>
-              <span className="mb-1 block text-sm font-medium">Tipo de empresa</span>
-              <select value={form.companyType} onChange={(e) => setForm({ ...form, companyType: e.target.value as CompanyType | "" })} className="w-full rounded-md border px-3 py-2">
-                <option value="">Selecione</option>
-                {COMPANY_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span className="mb-1 block text-sm font-medium">Responsável</span>
-              <input value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} className="w-full rounded-md border px-3 py-2" placeholder="Nome do contato" />
-            </label>
-            <label>
-              <span className="mb-1 block text-sm font-medium">E-mail</span>
-              <input
-                type="email"
-                value={form.contactEmail}
-                onChange={(e) => setForm({ ...form, contactEmail: e.target.value })}
-                className={`w-full rounded-md border px-3 py-2 ${fieldErrors.contactEmail ? "border-red-400" : ""}`}
-                placeholder="contato@empresa.com.br"
-              />
-              {fieldErrors.contactEmail && <span className="mt-1 block text-xs text-red-600">{fieldErrors.contactEmail}</span>}
-            </label>
-            <label>
-              <span className="mb-1 block text-sm font-medium">Telefone</span>
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full rounded-md border px-3 py-2" placeholder="(00) 00000-0000" />
-            </label>
-            <label>
-              <span className="mb-1 block text-sm font-medium">Status</span>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as LeadStatus })} className="w-full rounded-md border px-3 py-2">
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span className="mb-1 block text-sm font-medium">Crédito estimado (R$)</span>
-              <input
-                value={form.estimatedValue}
-                onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })}
-                className={`w-full rounded-md border px-3 py-2 ${fieldErrors.estimatedValue ? "border-red-400" : ""}`}
-                placeholder="0,00"
-                inputMode="decimal"
-              />
-              {fieldErrors.estimatedValue && <span className="mt-1 block text-xs text-red-600">{fieldErrors.estimatedValue}</span>}
-            </label>
-            <label className="flex items-center gap-2 md:col-span-2">
-              <input type="checkbox" checked={form.procurationSigned} onChange={(e) => setForm({ ...form, procurationSigned: e.target.checked })} />
-              <span className="text-sm font-medium">Procuração assinada</span>
-            </label>
-            <label className="flex items-center gap-2 md:col-span-2">
-              <input type="checkbox" checked={form.ndaSigned} onChange={(e) => setForm({ ...form, ndaSigned: e.target.checked })} />
-              <span className="text-sm font-medium">NDA assinado</span>
-            </label>
-            <label className="md:col-span-4">
-              <span className="mb-1 block text-sm font-medium">Observações</span>
-              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full rounded-md border px-3 py-2" rows={2} />
-            </label>
-            <div className="flex items-end md:col-span-4">
+
+          <div className="mb-4 flex gap-1 border-b border-border">
+            <button
+              type="button"
+              onClick={() => setFormTab("geral")}
+              className={`border-b-2 px-3 py-2 text-sm font-medium ${formTab === "geral" ? "border-navy text-navy" : "border-transparent text-muted hover:text-gray-700"}`}
+            >
+              Dados gerais
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormTab("endereco")}
+              className={`border-b-2 px-3 py-2 text-sm font-medium ${formTab === "endereco" ? "border-navy text-navy" : "border-transparent text-muted hover:text-gray-700"}`}
+            >
+              Endereço
+            </button>
+          </div>
+
+          <form onSubmit={submit}>
+            {formTab === "geral" && (
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="md:col-span-2">
+                  <span className="mb-1 flex items-center justify-between text-sm font-medium">
+                    <span>Razão social *</span>
+                    <span className="flex items-center gap-1 text-sm font-bold" title="Definido automaticamente quando o status vira &quot;Contrato&quot; ou &quot;Aprovado&quot;.">
+                      <input type="checkbox" checked={willBeClient} disabled readOnly />
+                      Cliente
+                    </span>
+                  </span>
+                  <input
+                    value={form.companyName}
+                    onChange={(e) => setForm({ ...form, companyName: e.target.value })}
+                    className={`w-full rounded-md border px-3 py-2 ${fieldErrors.companyName ? "border-red-400" : ""}`}
+                    placeholder="Ex.: Metalúrgica Sul Ltda"
+                  />
+                  {fieldErrors.companyName && <span className="mt-1 block text-xs text-red-600">{fieldErrors.companyName}</span>}
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">CNPJ</span>
+                  <input
+                    value={form.cnpj}
+                    onChange={(e) => setForm({ ...form, cnpj: formatCnpj(e.target.value) })}
+                    className={`w-full rounded-md border px-3 py-2 ${fieldErrors.cnpj ? "border-red-400" : ""}`}
+                    placeholder="00.000.000/0000-00"
+                    maxLength={18}
+                  />
+                  {fieldErrors.cnpj && <span className="mt-1 block text-xs text-red-600">{fieldErrors.cnpj}</span>}
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">Tipo de empresa</span>
+                  <select value={form.companyType} onChange={(e) => setForm({ ...form, companyType: e.target.value as CompanyType | "" })} className="w-full rounded-md border px-3 py-2">
+                    <option value="">Selecione</option>
+                    {COMPANY_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">Responsável</span>
+                  <input value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} className="w-full rounded-md border px-3 py-2" placeholder="Nome do contato" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">E-mail</span>
+                  <input
+                    type="email"
+                    value={form.contactEmail}
+                    onChange={(e) => setForm({ ...form, contactEmail: e.target.value })}
+                    className={`w-full rounded-md border px-3 py-2 ${fieldErrors.contactEmail ? "border-red-400" : ""}`}
+                    placeholder="contato@empresa.com.br"
+                  />
+                  {fieldErrors.contactEmail && <span className="mt-1 block text-xs text-red-600">{fieldErrors.contactEmail}</span>}
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">Telefone</span>
+                  <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full rounded-md border px-3 py-2" placeholder="(00) 00000-0000" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">Status</span>
+                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as LeadStatus })} className="w-full rounded-md border px-3 py-2">
+                    {STATUS_OPTIONS.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">Crédito estimado (R$)</span>
+                  <input
+                    value={form.estimatedValue}
+                    onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })}
+                    className={`w-full rounded-md border px-3 py-2 ${fieldErrors.estimatedValue ? "border-red-400" : ""}`}
+                    placeholder="0,00"
+                    inputMode="decimal"
+                  />
+                  {fieldErrors.estimatedValue && <span className="mt-1 block text-xs text-red-600">{fieldErrors.estimatedValue}</span>}
+                </label>
+
+                <div className="flex flex-wrap items-center gap-6 md:col-span-4">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={form.procurationSigned} onChange={(e) => setForm({ ...form, procurationSigned: e.target.checked })} />
+                    <span className="text-sm font-medium">Procuração assinada</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={form.ndaSigned} onChange={(e) => setForm({ ...form, ndaSigned: e.target.checked })} />
+                    <span className="text-sm font-medium">NDA assinado</span>
+                  </label>
+                </div>
+                <p className="text-xs text-muted md:col-span-4 -mt-2">
+                  O campo <strong>Cliente</strong> não é editável diretamente: é marcado automaticamente quando o status muda para <strong>Contrato</strong> ou <strong>Aprovado</strong>, e cada alteração fica registrada (quem alterou e quando).
+                  {clientFlagHistory.length > 0 && (
+                    <span className="ml-1">
+                      Última alteração: {clientFlagHistory[0].value ? "marcado" : "desmarcado"} por{" "}
+                      {clientFlagHistory[0].changedBy?.name || clientFlagHistory[0].changedBy?.email || "usuário removido"} em{" "}
+                      {new Date(clientFlagHistory[0].changedAt).toLocaleString("pt-BR")}.
+                    </span>
+                  )}
+                </p>
+
+                <label className="md:col-span-4">
+                  <span className="mb-1 block text-sm font-medium">Observações</span>
+                  <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full rounded-md border px-3 py-2" rows={2} />
+                </label>
+              </div>
+            )}
+
+            {formTab === "endereco" && (
+              <div className="grid gap-4 md:grid-cols-4">
+                <label>
+                  <span className="mb-1 block text-sm font-medium">CEP</span>
+                  <input
+                    value={form.addressZip}
+                    onChange={(e) => setForm({ ...form, addressZip: formatCep(e.target.value) })}
+                    className={`w-full rounded-md border px-3 py-2 ${fieldErrors.addressZip ? "border-red-400" : ""}`}
+                    placeholder="00000-000"
+                    maxLength={9}
+                  />
+                  {fieldErrors.addressZip && <span className="mt-1 block text-xs text-red-600">{fieldErrors.addressZip}</span>}
+                </label>
+                <label className="md:col-span-2">
+                  <span className="mb-1 block text-sm font-medium">Logradouro</span>
+                  <input value={form.addressStreet} onChange={(e) => setForm({ ...form, addressStreet: e.target.value })} className="w-full rounded-md border px-3 py-2" placeholder="Rua, avenida..." />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">Número</span>
+                  <input value={form.addressNumber} onChange={(e) => setForm({ ...form, addressNumber: e.target.value })} className="w-full rounded-md border px-3 py-2" placeholder="Nº" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">Complemento</span>
+                  <input value={form.addressComplement} onChange={(e) => setForm({ ...form, addressComplement: e.target.value })} className="w-full rounded-md border px-3 py-2" placeholder="Sala, bloco..." />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">Bairro</span>
+                  <input value={form.addressNeighborhood} onChange={(e) => setForm({ ...form, addressNeighborhood: e.target.value })} className="w-full rounded-md border px-3 py-2" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">Cidade</span>
+                  <input value={form.addressCity} onChange={(e) => setForm({ ...form, addressCity: e.target.value })} className="w-full rounded-md border px-3 py-2" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium">UF</span>
+                  <select value={form.addressState} onChange={(e) => setForm({ ...form, addressState: e.target.value })} className="w-full rounded-md border px-3 py-2">
+                    <option value="">Selecione</option>
+                    {UF_OPTIONS.map((uf) => (
+                      <option key={uf} value={uf}>
+                        {uf}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+
+            <div className="mt-4 flex items-end">
               <button disabled={saving} className="rounded-md bg-navy px-5 py-2 font-medium text-white disabled:opacity-50">
                 {saving ? "Salvando..." : editingId ? "Salvar alterações" : "Cadastrar lead"}
               </button>
@@ -350,9 +516,9 @@ export default function LeadsPage() {
 
         {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-4">
           <Card>
-            <CardTitle>Leads ativos</CardTitle>
+            <CardTitle>Leads/Clientes ativos</CardTitle>
             <p className="mt-2 text-2xl font-bold text-navy">{kpis.ativos}</p>
           </Card>
           <Card>
@@ -363,12 +529,22 @@ export default function LeadsPage() {
             <CardTitle>Sem NDA</CardTitle>
             <p className="mt-2 text-2xl font-bold text-yellow-700">{kpis.semNda}</p>
           </Card>
+          <Card>
+            <CardTitle>Clientes</CardTitle>
+            <p className="mt-2 text-2xl font-bold text-navy">{kpis.clientes}</p>
+          </Card>
         </div>
 
         <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold">Leads ({filtered.length})</h2>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-md border px-3 py-2 text-sm" placeholder="Buscar por empresa, CNPJ ou contato..." />
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-semibold">Leads/Clientes ({filtered.length})</h2>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={onlyClients} onChange={(e) => setOnlyClients(e.target.checked)} />
+                Somente clientes
+              </label>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-md border px-3 py-2 text-sm" placeholder="Buscar por empresa, CNPJ ou contato..." />
+            </div>
           </div>
 
           {loading ? (
@@ -426,12 +602,42 @@ export default function LeadsPage() {
                               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${lead.ndaSigned ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}>
                                 {lead.ndaSigned ? "NDA assinado" : "Sem NDA"}
                               </span>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${lead.isClient ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-600"}`}>
+                                {lead.isClient ? "Cliente" : "Não é cliente"}
+                              </span>
                             </p>
+                            {(lead.addressStreet || lead.addressCity) && (
+                              <p>
+                                <span className="text-muted">Endereço: </span>
+                                {[
+                                  [lead.addressStreet, lead.addressNumber].filter(Boolean).join(", "),
+                                  lead.addressComplement,
+                                  lead.addressNeighborhood,
+                                  [lead.addressCity, lead.addressState].filter(Boolean).join("/"),
+                                  lead.addressZip ? formatCep(lead.addressZip) : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" — ")}
+                              </p>
+                            )}
                             {lead.notes && (
                               <p>
                                 <span className="text-muted">Observações: </span>
                                 {lead.notes}
                               </p>
+                            )}
+                            {lead.clientFlagLogs && lead.clientFlagLogs.length > 0 && (
+                              <div>
+                                <span className="text-muted">Histórico do campo Cliente: </span>
+                                <ul className="mt-1 space-y-0.5 text-xs text-muted">
+                                  {lead.clientFlagLogs.map((log) => (
+                                    <li key={log.id}>
+                                      {log.value ? "Marcado" : "Desmarcado"} por {log.changedBy?.name || log.changedBy?.email || "usuário removido"} em{" "}
+                                      {new Date(log.changedAt).toLocaleString("pt-BR")}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
                             )}
                           </div>
                           <div className="flex flex-col gap-2 sm:flex-row md:flex-col md:items-end">

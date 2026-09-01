@@ -21,6 +21,7 @@ enum AppRole {
   juridico
   comercial
   aprovador
+  lead_cliente
 }
 
 enum UserStatus {
@@ -40,6 +41,8 @@ model User {
   passwordHash  String? // login por e-mail/senha
   status        UserStatus @default(ativo)
   lastAccessAt  DateTime? // "último acesso" (PRD 6.10)
+  linkedLeadId  String? // Lead/Cliente vinculado — obrigatório para o perfil lead_cliente
+  linkedLead    Lead?      @relation("LeadClientUser", fields: [linkedLeadId], references: [id], onDelete: SetNull)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -50,6 +53,7 @@ model User {
   documents  Document[]    @relation("DocumentUploadedBy")
   spedFiles  SpedFile[]    @relation("SpedFileUploadedBy")
   analises   AnaliseFiscal[] @relation("AnaliseAnalyst")
+  leadClientFlagChanges LeadClientFlagLog[] @relation("LeadClientFlagChangedBy")
 
   @@map("users")
 }
@@ -146,19 +150,47 @@ model Lead {
   estimatedValue Decimal     @default(0) @db.Decimal(14, 2)
   procurationSigned Boolean  @default(false)
   ndaSigned         Boolean  @default(false)
+  isClient          Boolean  @default(false) // "Cliente" — alterações ficam registradas em LeadClientFlagLog
+
+  // Endereço completo (aba própria no cadastro/edição do lead)
+  addressZip          String?
+  addressStreet       String?
+  addressNumber       String?
+  addressComplement   String?
+  addressNeighborhood String?
+  addressCity         String?
+  addressState        String?
+
   notes          String?
   ownerId        String?
   owner          User?       @relation("LeadOwner", fields: [ownerId], references: [id])
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  documents   Document[]
-  analises    AnaliseFiscal[]
-  approvals   Aprovacao[]
-  projects    Project[]
-  spedFiles   SpedFile[]
+  documents       Document[]
+  analises        AnaliseFiscal[]
+  approvals       Aprovacao[]
+  projects        Project[]
+  spedFiles       SpedFile[]
+  clientFlagLogs  LeadClientFlagLog[]
+  clientUsers     User[]              @relation("LeadClientUser")
 
   @@map("leads")
+}
+
+// Log de auditoria do campo "Cliente" (isClient) — registra cada alteração,
+// por quem foi feita e quando.
+model LeadClientFlagLog {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  value       Boolean
+  changedById String?
+  changedBy   User?    @relation("LeadClientFlagChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  changedAt   DateTime @default(now())
+
+  @@index([leadId])
+  @@map("lead_client_flag_logs")
 }
 
 enum ProjectStatus {

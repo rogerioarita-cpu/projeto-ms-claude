@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isReadOnlySession } from "@/server/session-scope";
 
 const validStatuses = [
   "planejamento",
@@ -37,6 +38,10 @@ function parsePayload(body: any) {
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
+    if (await isReadOnlySession()) {
+      return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
+    }
+
     const body = await request.json();
     const data = parsePayload(body);
 
@@ -65,6 +70,10 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
 export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
   try {
+    if (await isReadOnlySession()) {
+      return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
+    }
+
     const existing = await prisma.project.findUnique({
       where: { id: params.id },
       include: {

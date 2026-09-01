@@ -5,6 +5,7 @@ export const ROLE_VALUES = [
   "juridico",
   "comercial",
   "aprovador",
+  "lead_cliente",
 ] as const;
 
 export type RoleValue = (typeof ROLE_VALUES)[number];
@@ -16,6 +17,7 @@ export const ROLE_LABELS: Record<RoleValue, string> = {
   juridico: "Jurídico",
   comercial: "Comercial",
   aprovador: "Aprovador",
+  lead_cliente: "Lead/Cliente",
 };
 
 // Breve descrição de cada perfil, usada no modal de cadastro de usuário (PRD 6.10).
@@ -26,4 +28,5 @@ export const ROLE_DESCRIPTIONS: Record<RoleValue, string> = {
   juridico: "Responsável pela aprovação da área Jurídico.",
   comercial: "Responsável pela aprovação da área Comercial.",
   aprovador: "Responsável pelas aprovações de Financeiro e Concorrência.",
+  lead_cliente: "Acesso somente de consulta, restrito aos dados do Lead/Cliente vinculado.",
 };

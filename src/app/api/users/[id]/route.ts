@@ -13,6 +13,7 @@ const updateUserSchema = z.object({
   password: z.string().min(8).optional().or(z.literal("")),
   roles: z.array(z.enum(ROLE_VALUES)).min(1, "Selecione ao menos um papel"),
   status: z.enum(STATUS_VALUES).optional(),
+  linkedLeadId: z.string().nullable().optional(),
 });
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
@@ -22,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 
     const user = await prisma.user.findUnique({
       where: { id: params.id },
-      include: { roles: true },
+      include: { roles: true, linkedLead: true },
     });
     if (!user) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
 
@@ -32,6 +33,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       email: user.email,
       status: user.status,
       lastAccessAt: user.lastAccessAt,
+      linkedLeadId: user.linkedLeadId,
       roles: user.roles.map((r) => r.role),
     });
   } catch (error) {
@@ -51,7 +53,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       const firstError = Object.values(parsed.error.flatten().fieldErrors)[0]?.[0];
       return NextResponse.json({ error: firstError ?? "Dados inválidos." }, { status: 400 });
     }
-    const { name, email, password, roles, status } = parsed.data;
+    const { name, email, password, roles, status, linkedLeadId } = parsed.data;
+
+    if (roles.includes("lead_cliente") && !linkedLeadId) {
+      return NextResponse.json({ error: "Selecione o Lead/Cliente vinculado para o perfil Lead/Cliente." }, { status: 400 });
+    }
 
     const target = await prisma.user.findUnique({ where: { id: params.id } });
     if (!target) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
@@ -79,6 +85,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
           name,
           email,
           status: status ?? target.status,
+          linkedLeadId: roles.includes("lead_cliente") ? linkedLeadId || null : null,
           ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
         },
       });

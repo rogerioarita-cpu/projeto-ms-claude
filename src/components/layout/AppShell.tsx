@@ -6,7 +6,7 @@ const NAV = [
   { href: "/inicio", label: "Início" },
   {
     href: "/leads",
-    label: "Gestão de leads",
+    label: "Gestão de Leads/Clientes",
     children: [{ href: "/documentos", label: "Gestão documental" }],
   },
   { href: "/workflow", label: "Workflow e acompanhamento" },

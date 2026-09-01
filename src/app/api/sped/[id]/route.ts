@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isReadOnlySession } from "@/server/session-scope";
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
   try {
@@ -21,6 +22,10 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 
 export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
   try {
+    if (await isReadOnlySession()) {
+      return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
+    }
+
     const existing = await prisma.spedFile.findUnique({ where: { id: params.id } });
     if (!existing) return NextResponse.json({ error: "Arquivo SPED não encontrado." }, { status: 404 });
     await prisma.spedFile.delete({ where: { id: params.id } });

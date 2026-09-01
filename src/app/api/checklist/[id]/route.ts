@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isReadOnlySession } from "@/server/session-scope";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
+    if (await isReadOnlySession()) {
+      return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
+    }
+
     const body = await request.json();
     const done = Boolean(body.done);
     const existing = await prisma.checklistItem.findUnique({ where: { id: params.id } });

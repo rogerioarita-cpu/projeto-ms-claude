@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROLE_VALUES, ROLE_LABELS, ROLE_DESCRIPTIONS, type RoleValue } from "@/lib/role-options";
 
+type Lead = { id: string; companyName: string };
 type StatusValue = "ativo" | "inativo" | "bloqueado";
 
 type Initial = {
@@ -12,6 +13,7 @@ type Initial = {
   email: string;
   roles: RoleValue[];
   status?: StatusValue;
+  linkedLeadId?: string | null;
 };
 
 export function UserForm({ initial }: { initial?: Initial }) {
@@ -23,12 +25,23 @@ export function UserForm({ initial }: { initial?: Initial }) {
   const [password, setPassword] = useState("");
   const [roles, setRoles] = useState<RoleValue[]>(initial?.roles ?? []);
   const [status, setStatus] = useState<StatusValue>(initial?.status ?? "ativo");
+  const [linkedLeadId, setLinkedLeadId] = useState(initial?.linkedLeadId ?? "");
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/leads", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: Lead[]) => setLeads([...data].sort((a, b) => a.companyName.localeCompare(b.companyName, "pt-BR"))))
+      .catch(() => setLeads([]));
+  }, []);
 
   function toggleRole(role: RoleValue) {
     setRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
   }
+
+  const needsLinkedLead = roles.includes("lead_cliente");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,6 +55,10 @@ export function UserForm({ initial }: { initial?: Initial }) {
       setError("A senha precisa ter ao menos 8 caracteres.");
       return;
     }
+    if (needsLinkedLead && !linkedLeadId) {
+      setError("Selecione o Lead/Cliente vinculado para o perfil Lead/Cliente.");
+      return;
+    }
 
     setLoading(true);
     const url = isEdit ? `/api/users/${initial!.id}` : "/api/users";
@@ -50,7 +67,7 @@ export function UserForm({ initial }: { initial?: Initial }) {
     const res = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password: password || undefined, roles, status }),
+      body: JSON.stringify({ name, email, password: password || undefined, roles, status, linkedLeadId: needsLinkedLead ? linkedLeadId : null }),
     });
 
     setLoading(false);
@@ -124,6 +141,21 @@ export function UserForm({ initial }: { initial?: Initial }) {
           ))}
         </div>
       </div>
+
+      {needsLinkedLead && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Lead/Cliente vinculado *</label>
+          <select value={linkedLeadId} onChange={(e) => setLinkedLeadId(e.target.value)} className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm">
+            <option value="">Selecione</option>
+            {leads.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.companyName}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-muted">Obrigatório para o perfil Lead/Cliente — restringe o acesso apenas à consulta dos dados desse Lead/Cliente.</p>
+        </div>
+      )}
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 

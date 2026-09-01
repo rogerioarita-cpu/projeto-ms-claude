@@ -3,7 +3,7 @@ import { AppShell } from "@/components/layout/AppShell";
 
 const MODULES: { title: string; description: string; href: string }[] = [
   {
-    title: "Gestão de Leads",
+    title: "Gestão de Leads/Clientes",
     description: "Cadastro, qualificação e acompanhamento de leads ao longo do pipeline.",
     href: "/leads",
   },

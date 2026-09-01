@@ -2,13 +2,18 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
+import { isReadOnlySession, getLeadScopeFilter } from "@/server/session-scope";
 
 const DOC_TYPES = ["procuracao", "nda", "contrato", "aditivo", "outro"] as const;
 
 export async function GET(request: Request) {
   try {
+    const leadScope = await getLeadScopeFilter();
     const { searchParams } = new URL(request.url);
-    const leadId = searchParams.get("leadId");
+    const leadIdParam = searchParams.get("leadId");
+    // Se o usuário tiver escopo (perfil Lead/Cliente), ignora o filtro da querystring
+    // e força a restrição ao lead vinculado.
+    const leadId = leadScope ?? leadIdParam;
     const documents = await prisma.document.findMany({
       where: leadId ? { leadId } : undefined,
       orderBy: { createdAt: "desc" },
@@ -23,6 +28,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (await isReadOnlySession()) {
+      return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
+    }
+
     const session = await getServerSession(authOptions);
     const body = await request.json();
     const name = String(body.name ?? "").trim();

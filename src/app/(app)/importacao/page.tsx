@@ -31,6 +31,7 @@ export default function ImportacaoSpedPage() {
   const [error, setError] = useState("");
 
   const [leadId, setLeadId] = useState("");
+  const [onlyClientLeads, setOnlyClientLeads] = useState(false);
   const [tipo, setTipo] = useState<SpedFileType>("efd_icms_ipi");
   const [projectId, setProjectId] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -91,8 +92,11 @@ export default function ImportacaoSpedPage() {
   }
 
   const sortedLeads = useMemo(
-    () => [...leads].sort((a, b) => a.companyName.localeCompare(b.companyName, "pt-BR")),
-    [leads]
+    () =>
+      [...leads]
+        .filter((l) => !onlyClientLeads || l.isClient)
+        .sort((a, b) => a.companyName.localeCompare(b.companyName, "pt-BR")),
+    [leads, onlyClientLeads]
   );
 
   const projectsForLead = useMemo(
@@ -179,7 +183,28 @@ export default function ImportacaoSpedPage() {
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             <label>
-              <span className="mb-1 block text-sm font-medium">Lead *</span>
+              <span className="mb-1 flex items-center justify-between text-sm font-medium">
+                <span>Lead/clientes *</span>
+                <span className="flex items-center gap-1 text-sm font-bold" title="Mostrar apenas leads marcados como cliente.">
+                  <input
+                    type="checkbox"
+                    checked={onlyClientLeads}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setOnlyClientLeads(checked);
+                      // Se o lead selecionado não for cliente, limpa a seleção ao ativar o filtro.
+                      if (checked) {
+                        const currentLead = leads.find((l) => l.id === leadId);
+                        if (currentLead && !currentLead.isClient) {
+                          setLeadId("");
+                          setProjectId("");
+                        }
+                      }
+                    }}
+                  />
+                  Cliente
+                </span>
+              </span>
               <select
                 value={leadId}
                 required
@@ -194,7 +219,7 @@ export default function ImportacaoSpedPage() {
                 }}
                 className="w-full rounded-md border px-3 py-2 text-sm"
               >
-                <option value="">Selecione o lead</option>
+                <option value="">Selecione o lead/cliente</option>
                 {sortedLeads.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.companyName}
@@ -202,7 +227,7 @@ export default function ImportacaoSpedPage() {
                 ))}
               </select>
               {leads.length === 0 && (
-                <span className="mt-1 block text-xs text-muted">Nenhum lead cadastrado — cadastre em "Gestão de leads" antes de importar.</span>
+                <span className="mt-1 block text-xs text-muted">Nenhum lead cadastrado — cadastre em "Gestão de Leads/Clientes" antes de importar.</span>
               )}
             </label>
             <label>

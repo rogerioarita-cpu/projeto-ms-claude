@@ -4,6 +4,7 @@ import { authOptions } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
 import { parseSpedFile, sniffSpedFileType, toSpedFileRecord } from "@/lib/sped/parse";
 import type { SpedFileTypeValue } from "@/lib/sped/types";
+import { isReadOnlySession, getLeadScopeFilter } from "@/server/session-scope";
 
 const LABELS: Record<SpedFileTypeValue, string> = {
   efd_icms_ipi: "EFD ICMS/IPI",
@@ -22,9 +23,11 @@ function onlyDigits(v: string | null | undefined) {
 
 export async function GET(request: Request) {
   try {
+    const leadScope = await getLeadScopeFilter();
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get("projectId");
-    const leadId = searchParams.get("leadId");
+    const leadIdParam = searchParams.get("leadId");
+    const leadId = leadScope ?? leadIdParam;
     const type = searchParams.get("type");
     const status = searchParams.get("status");
 
@@ -52,6 +55,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (await isReadOnlySession()) {
+      return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
+    }
+
     const contentType = request.headers.get("content-type") || "";
     if (!contentType.includes("multipart/form-data")) {
       return NextResponse.json({ error: "Envie o arquivo como multipart/form-data (campo 'file')." }, { status: 400 });

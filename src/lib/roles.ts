@@ -18,3 +18,8 @@ export function hasRole(roles: AppRole[], role: AppRole): boolean {
   return roles.includes(role);
 }
 
+/** true se o usuário só pode consultar os dados do Lead/Cliente ao qual está vinculado. */
+export function isLeadCliente(roles: AppRole[]): boolean {
+  return roles.includes("lead_cliente");
+}
+

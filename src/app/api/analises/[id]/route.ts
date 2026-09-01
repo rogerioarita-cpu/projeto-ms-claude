@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isReadOnlySession } from "@/server/session-scope";
 
 const TAX_TYPES = ["pis_cofins", "icms", "ipi", "irpj_csll", "outros"] as const;
 const STATUSES = ["em_andamento", "concluida", "aprovada", "rejeitada"] as const;
@@ -21,6 +22,10 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
+    if (await isReadOnlySession()) {
+      return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
+    }
+
     const body = await request.json();
     const taxType = String(body.taxType ?? "");
     const thesis = String(body.thesis ?? "").trim();
@@ -67,6 +72,10 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
 export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
   try {
+    if (await isReadOnlySession()) {
+      return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
+    }
+
     const existing = await prisma.analiseFiscal.findUnique({ where: { id: params.id } });
     if (!existing) return NextResponse.json({ error: "Análise não encontrada." }, { status: 404 });
     await prisma.analiseFiscal.delete({ where: { id: params.id } });
