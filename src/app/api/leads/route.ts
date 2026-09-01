@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseLeadPayload } from "@/lib/leads/validate";
-import { getLeadScopeFilter } from "@/server/session-scope";
 
 export async function GET() {
   try {
-    const leadScope = await getLeadScopeFilter();
     const leads = await prisma.lead.findMany({
-      where: leadScope ? { id: leadScope } : undefined,
       orderBy: { createdAt: "desc" },
       include: { owner: true },
     });

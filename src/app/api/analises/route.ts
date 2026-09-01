@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getLeadScopeFilter } from "@/server/session-scope";
 
 const TAX_TYPES = ["pis_cofins", "icms", "ipi", "irpj_csll", "outros"] as const;
 const STATUSES = ["em_andamento", "concluida", "aprovada", "rejeitada"] as const;
 
 export async function GET() {
   try {
-    const leadScope = await getLeadScopeFilter();
     const analises = await prisma.analiseFiscal.findMany({
-      where: leadScope ? { leadId: leadScope } : undefined,
       orderBy: { createdAt: "desc" },
       include: { lead: true, analyst: true, checklist: { orderBy: { order: "asc" } }, approvals: true },
     });

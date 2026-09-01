@@ -11,7 +11,6 @@ export function UserStatusSelect({
   name,
   email,
   roles,
-  linkedLeadId,
   status,
   disabled,
 }: {
@@ -19,7 +18,6 @@ export function UserStatusSelect({
   name: string | null;
   email: string;
   roles: RoleValue[];
-  linkedLeadId: string | null;
   status: StatusValue;
   disabled?: boolean;
 }) {
@@ -31,7 +29,7 @@ export function UserStatusSelect({
     const res = await fetch(`/api/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name ?? "", email, roles, linkedLeadId, status: next }),
+      body: JSON.stringify({ name: name ?? "", email, roles, status: next }),
     });
     setLoading(false);
     if (!res.ok) {

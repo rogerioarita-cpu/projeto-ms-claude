@@ -1,5 +1,3 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/server/auth";
 import { AppShell } from "@/components/layout/AppShell";
 import { prisma } from "@/lib/prisma";
 import { WorkflowAccordion, type WorkflowItem } from "@/components/workflow/WorkflowAccordion";
@@ -31,13 +29,7 @@ function onlyDigits(v: string | null) {
 }
 
 export default async function WorkflowPage() {
-  const session = await getServerSession(authOptions);
-  const roles = (session?.user as { roles?: string[] } | undefined)?.roles ?? [];
-  const linkedLeadId = (session?.user as { linkedLeadId?: string | null } | undefined)?.linkedLeadId;
-  const isClienteConsulta = roles.includes("cliente_consulta");
-
   const leads = await prisma.lead.findMany({
-    where: isClienteConsulta ? { id: linkedLeadId ?? "__nenhum__" } : undefined,
     orderBy: { createdAt: "desc" },
   });
   const spedFiles = await prisma.spedFile.findMany({ select: { cnpj: true } });
@@ -45,7 +37,6 @@ export default async function WorkflowPage() {
   const documents = await prisma.document.findMany({
     where: {
       type: { in: TRACKED_DOC_TYPES.map((t) => t.value) },
-      ...(isClienteConsulta ? { leadId: linkedLeadId ?? "__nenhum__" } : {}),
     },
     select: { leadId: true, type: true, status: true, version: true },
   });

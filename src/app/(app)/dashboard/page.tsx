@@ -1,5 +1,3 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/server/auth";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -8,12 +6,7 @@ import { brl, dateFmt, daysUntil } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-async function getData(leadScope?: string) {
-  const leadWhere = leadScope ? { id: leadScope } : undefined;
-  const analiseWhere = leadScope ? { leadId: leadScope } : undefined;
-  const docWhere = leadScope ? { leadId: leadScope } : undefined;
-  const aprovacaoWhere = leadScope ? { leadId: leadScope } : undefined;
-
+async function getData() {
   const [
     leads,
     analisesEmAndamento,
@@ -25,12 +18,11 @@ async function getData(leadScope?: string) {
     topCredits,
     openInconsistencies,
   ] = await Promise.all([
-    prisma.lead.findMany({ where: leadWhere }),
-    prisma.analiseFiscal.count({ where: { ...analiseWhere, status: "em_andamento" } }),
-    prisma.aprovacao.count({ where: { ...aprovacaoWhere, status: "pendente" } }),
-    prisma.document.count({ where: { ...docWhere, status: "pendente" } }),
+    prisma.lead.findMany(),
+    prisma.analiseFiscal.count({ where: { status: "em_andamento" } }),
+    prisma.aprovacao.count({ where: { status: "pendente" } }),
+    prisma.document.count({ where: { status: "pendente" } }),
     prisma.analiseFiscal.findMany({
-      where: analiseWhere,
       orderBy: { createdAt: "desc" },
       take: 5,
       include: { lead: true },
@@ -73,12 +65,7 @@ async function getData(leadScope?: string) {
 }
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions);
-  const roles = (session?.user as { roles?: string[] } | undefined)?.roles ?? [];
-  const linkedLeadId = (session?.user as { linkedLeadId?: string | null } | undefined)?.linkedLeadId;
-  const leadScope = roles.includes("cliente_consulta") ? linkedLeadId ?? "__nenhum__" : undefined;
-
-  const data = await getData(leadScope);
+  const data = await getData();
 
   const kpis = [
     { label: "Leads ativos", value: String(data.leadsAtivos) },

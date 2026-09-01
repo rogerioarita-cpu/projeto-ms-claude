@@ -84,19 +84,6 @@ async function main() {
   const leads = await prisma.lead.findMany();
   const leadByName = (name: string) => leads.find((l) => l.companyName === name)!;
 
-  // Cria um usuário de exemplo com o perfil Cliente-Consulta, vinculado a um lead.
-  await prisma.user.upsert({
-    where: { email: "cliente@agrocampo.coop" },
-    update: {},
-    create: {
-      email: "cliente@agrocampo.coop",
-      name: "Marina Alves",
-      status: "ativo",
-      linkedLeadId: leadByName("AgroCampo Cooperativa").id,
-      roles: { create: [{ role: "cliente_consulta" }] },
-    },
-  });
-
   await prisma.inconsistency.createMany({
     data: [
       { projectId: projAurora.id, code: "C100-017", description: "CFOP incompatível com CST de PIS/COFINS", severity: "alta", resolved: false },

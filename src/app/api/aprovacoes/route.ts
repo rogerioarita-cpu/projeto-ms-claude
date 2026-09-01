@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getLeadScopeFilter } from "@/server/session-scope";
 
 export async function GET() {
   try {
-    const leadScope = await getLeadScopeFilter();
     const approvals = await prisma.aprovacao.findMany({
-      where: leadScope ? { leadId: leadScope } : undefined,
       orderBy: { createdAt: "desc" },
       include: { lead: true, analise: true },
     });

@@ -21,7 +21,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
 
   const allUsers = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
-    include: { roles: true, linkedLead: true },
+    include: { roles: true },
   });
 
   const users = allUsers.filter((u) => {
@@ -87,7 +87,6 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
                   <th className="py-2 pr-4">Nome</th>
                   <th className="py-2 pr-4">E-mail</th>
                   <th className="py-2 pr-4">Papéis</th>
-                  <th className="py-2 pr-4">Empresa vinculada</th>
                   <th className="py-2 pr-4">Status</th>
                   <th className="py-2 pr-4">Último acesso</th>
                   <th className="py-2 pr-4">Ações</th>
@@ -110,14 +109,12 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
                         ))}
                       </div>
                     </td>
-                    <td className="py-2 pr-4 text-muted">{u.linkedLead?.companyName || "—"}</td>
                     <td className="py-2 pr-4">
                       <UserStatusSelect
                         userId={u.id}
                         name={u.name}
                         email={u.email}
                         roles={u.roles.map((r) => r.role as RoleValue)}
-                        linkedLeadId={u.linkedLeadId}
                         status={u.status}
                         disabled={u.id === currentUserId}
                       />
@@ -139,9 +136,8 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
         </Card>
 
         <p className="text-xs text-muted">
-          RBAC: cada usuário pode ter mais de um papel. O perfil <strong>Cliente-Consulta</strong> só enxerga dados da empresa
-          vinculada; os demais perfis (Administrador, Gestor, Analista Fiscal, Jurídico, Comercial, Aprovador) têm acesso
-          conforme sua função no fluxo de análise e aprovação.
+          RBAC: cada usuário pode ter mais de um papel (Administrador, Gestor, Analista Fiscal, Jurídico, Comercial,
+          Aprovador), com acesso conforme sua função no fluxo de análise e aprovação.
         </p>
       </div>
     </AppShell>

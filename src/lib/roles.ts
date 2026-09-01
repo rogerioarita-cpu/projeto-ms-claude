@@ -18,7 +18,3 @@ export function hasRole(roles: AppRole[], role: AppRole): boolean {
   return roles.includes(role);
 }
 
-/** true se o usuário só enxerga dados da própria empresa (PRD: filtro automático para cliente_consulta). */
-export function isClienteConsulta(roles: AppRole[]): boolean {
-  return roles.includes("cliente_consulta");
-}

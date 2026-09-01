@@ -15,7 +15,6 @@ const createUserSchema = z.object({
   password: z.string().min(8, "A senha precisa ter ao menos 8 caracteres").optional().or(z.literal("")),
   roles: z.array(z.enum(ROLE_VALUES)).min(1, "Selecione ao menos um papel"),
   status: z.enum(STATUS_VALUES).optional(),
-  linkedLeadId: z.string().nullable().optional(),
 });
 
 export async function GET() {
@@ -28,7 +27,7 @@ export async function GET() {
 
     const users = await prisma.user.findMany({
       orderBy: { createdAt: "desc" },
-      include: { roles: true, linkedLead: true },
+      include: { roles: true },
     });
 
     return NextResponse.json(
@@ -40,8 +39,6 @@ export async function GET() {
         lastAccessAt: u.lastAccessAt,
         createdAt: u.createdAt,
         roles: u.roles.map((r) => r.role),
-        linkedLeadId: u.linkedLeadId,
-        linkedLead: u.linkedLead ? { id: u.linkedLead.id, companyName: u.linkedLead.companyName } : null,
       }))
     );
   } catch (error) {
@@ -61,11 +58,7 @@ export async function POST(request: Request) {
       const firstError = Object.values(parsed.error.flatten().fieldErrors)[0]?.[0];
       return NextResponse.json({ error: firstError ?? "Dados inválidos." }, { status: 400 });
     }
-    const { name, email, password, roles, status, linkedLeadId } = parsed.data;
-
-    if (roles.includes("cliente_consulta") && !linkedLeadId) {
-      return NextResponse.json({ error: "Selecione a empresa vinculada para o perfil Cliente-Consulta." }, { status: 400 });
-    }
+    const { name, email, password, roles, status } = parsed.data;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -80,7 +73,6 @@ export async function POST(request: Request) {
         email,
         passwordHash,
         status: status ?? "ativo",
-        linkedLeadId: linkedLeadId || null,
         roles: { create: roles.map((role) => ({ role })) },
       },
       include: { roles: true },

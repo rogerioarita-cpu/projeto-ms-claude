@@ -21,7 +21,6 @@ enum AppRole {
   juridico
   comercial
   aprovador
-  cliente_consulta
 }
 
 enum UserStatus {
@@ -41,8 +40,6 @@ model User {
   passwordHash  String? // login por e-mail/senha
   status        UserStatus @default(ativo)
   lastAccessAt  DateTime? // "último acesso" (PRD 6.10)
-  linkedLeadId  String? // empresa vinculada — obrigatório para o perfil cliente_consulta
-  linkedLead    Lead?      @relation("ClientUsers", fields: [linkedLeadId], references: [id], onDelete: SetNull)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -155,7 +152,6 @@ model Lead {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  clientUsers User[]          @relation("ClientUsers")
   documents   Document[]
   analises    AnaliseFiscal[]
   approvals   Aprovacao[]
