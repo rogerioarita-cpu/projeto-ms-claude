@@ -27,8 +27,9 @@ export type SpedFileItem = {
   uploadedBy?: { name: string | null; email: string } | null;
   duplicateOfId?: string | null;
   extracted?: {
-    avisos: SpedIssue[];
-    erros: SpedIssue[];
+    avisos?: SpedIssue[];
+    erros?: SpedIssue[];
+    importError?: string;
     documentos?: { totalNotasEntrada: number; totalNotasSaida: number; valorTotalEntradas: number; valorTotalSaidas: number };
     apuracaoIcms?: {
       valorTotalDebitos: number;

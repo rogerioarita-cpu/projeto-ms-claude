@@ -418,23 +418,30 @@ function DetailModal({ item, onClose }: { item: SpedFileItem; onClose: () => voi
           </section>
         )}
 
-        {ex && (ex.avisos.length > 0 || ex.erros.length > 0) && (
+        {ex?.importError && (
+          <section className="mt-5">
+            <h3 className="text-sm font-semibold text-red-700">Mensagem de erro da importação</h3>
+            <p className="mt-1 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{ex.importError}</p>
+          </section>
+        )}
+
+        {ex && ((ex.avisos?.length ?? 0) > 0 || (ex.erros?.length ?? 0) > 0) && (
           <section className="mt-5 space-y-3">
-            {ex.erros.length > 0 && (
+            {(ex.erros?.length ?? 0) > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-red-700">Erros ({ex.erros.length})</h3>
+                <h3 className="text-sm font-semibold text-red-700">Erros ({ex.erros!.length})</h3>
                 <ul className="mt-1 space-y-1 text-xs text-red-700">
-                  {ex.erros.slice(0, 20).map((i, idx) => (
+                  {ex.erros!.slice(0, 20).map((i, idx) => (
                     <li key={idx}>Linha {i.linha || "-"} [{i.registro}]: {i.mensagem}</li>
                   ))}
                 </ul>
               </div>
             )}
-            {ex.avisos.length > 0 && (
+            {(ex.avisos?.length ?? 0) > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-yellow-700">Avisos ({ex.avisos.length})</h3>
+                <h3 className="text-sm font-semibold text-yellow-700">Avisos ({ex.avisos!.length})</h3>
                 <ul className="mt-1 space-y-1 text-xs text-yellow-700">
-                  {ex.avisos.slice(0, 20).map((i, idx) => (
+                  {ex.avisos!.slice(0, 20).map((i, idx) => (
                     <li key={idx}>Linha {i.linha || "-"} [{i.registro}]: {i.mensagem}</li>
                   ))}
                 </ul>

@@ -8,6 +8,19 @@ function isOk(status: SpedFileItem["status"]) {
   return status === "sucesso" || status === "aviso";
 }
 
+/** Mensagem de erro a exibir na listagem: prioriza o erro de importação (bloqueio
+ * antes do parsing — tipo incompatível, CNPJ divergente, duplicidade, etc.), depois
+ * o primeiro erro de parsing do próprio arquivo, se houver. */
+function errorMessageOf(f: SpedFileItem): string {
+  if (f.extracted?.importError) return f.extracted.importError;
+  if (f.status === "duplicado") return "Arquivo já importado anteriormente.";
+  const erros = f.extracted?.erros ?? [];
+  if (erros.length > 0) {
+    return erros.length > 1 ? `${erros[0].mensagem} (+${erros.length - 1})` : erros[0].mensagem;
+  }
+  return "—";
+}
+
 function ChevronIcon({ open }: { open: boolean }) {
   return (
     <svg
@@ -53,7 +66,7 @@ export function SpedCascade({
     return files.filter((f) => {
       return (
         !q ||
-        [f.fileName, f.companyName ?? "", leadNameOf(f), f.project?.name ?? ""].join(" ").toLowerCase().includes(q) ||
+        [f.fileName, f.companyName ?? "", leadNameOf(f), f.project?.name ?? "", f.uploadedBy?.name ?? "", f.uploadedBy?.email ?? ""].join(" ").toLowerCase().includes(q) ||
         (digits.length > 0 && onlyDigits(f.cnpj).includes(digits))
       );
     });
@@ -83,75 +96,80 @@ export function SpedCascade({
 
   function renderFilesTable(list: SpedFileItem[]) {
     return (
-      <div className="overflow-x-auto border-t border-border bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs uppercase text-muted">
-              <th className="px-5 py-2">Arquivo</th>
-              <th className="px-5 py-2">Lead</th>
-              <th className="px-5 py-2">Empresa / CNPJ</th>
-              <th className="px-5 py-2">Período</th>
-              <th className="px-5 py-2">Registros</th>
-              <th className="px-5 py-2">Status</th>
-              <th className="px-5 py-2">Data</th>
-              <th className="px-5 py-2 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...list]
-              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-              .map((f) => (
-                <tr key={f.id} className="border-b border-border last:border-0">
-                  <td className="px-5 py-2.5 font-medium">
-                    {f.fileName}
-                    <br />
+      <div className="divide-y divide-border border-t border-border bg-white">
+        {[...list]
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .map((f) => {
+            const err = errorMessageOf(f);
+            const periodo = f.periodStart === f.periodEnd ? f.periodStart || "—" : `${f.periodStart ?? "—"} a ${f.periodEnd ?? "—"}`;
+            return (
+              <div key={f.id} className="px-5 py-4">
+                {/* Linha 1 — identificação do arquivo, status e ações */}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="font-medium">{f.fileName}</span>
                     <span className="text-xs text-muted">{f.fileSizeKb} KB</span>
-                  </td>
-                  <td className="px-5 py-2.5">{leadNameOf(f)}</td>
-                  <td className="px-5 py-2.5">
-                    {f.companyName || "—"}
-                    <br />
-                    <span className="text-xs text-muted">{formatCnpj(f.cnpj)}</span>
-                  </td>
-                  <td className="px-5 py-2.5">
-                    {f.periodStart === f.periodEnd ? f.periodStart || "—" : `${f.periodStart ?? "—"} a ${f.periodEnd ?? "—"}`}
-                  </td>
-                  <td className="px-5 py-2.5">
+                    <Badge value={f.status} />
+                  </div>
+                  <div className="flex flex-shrink-0 gap-2">
+                    {f.status !== "duplicado" && (
+                      <button type="button" onClick={() => onOpenDetail(f)} className="rounded-md border px-3 py-1.5 text-sm">
+                        Ver detalhe
+                      </button>
+                    )}
+                    <button type="button" onClick={() => onRemove(f)} className="rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-700">
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+
+                {/* Linha 2 — demais dados, com espaçamento generoso entre campos */}
+                <div className="mt-3 flex flex-wrap items-center gap-x-10 gap-y-2 text-sm">
+                  <span>
+                    <span className="mr-1 text-xs uppercase text-muted">CNPJ:</span>
+                    {formatCnpj(f.cnpj)}
+                  </span>
+                  <span>
+                    <span className="mr-1 text-xs uppercase text-muted">Período:</span>
+                    {periodo}
+                  </span>
+                  <span>
+                    <span className="mr-1 text-xs uppercase text-muted">Registros:</span>
                     {f.status === "duplicado" ? (
-                      <span className="text-xs text-muted">— (bloqueado, não processado)</span>
+                      "— (bloqueado, não processado)"
                     ) : (
                       <>
                         {f.totalRecords}
                         {(f.warningsCount > 0 || f.errorsCount > 0) && (
-                          <div className="text-xs text-muted">
-                            {f.warningsCount > 0 ? `${f.warningsCount} aviso(s)` : ""}
+                          <span className="ml-1 text-xs text-muted">
+                            ({f.warningsCount > 0 ? `${f.warningsCount} aviso(s)` : ""}
                             {f.warningsCount > 0 && f.errorsCount > 0 ? " · " : ""}
-                            {f.errorsCount > 0 ? `${f.errorsCount} erro(s)` : ""}
-                          </div>
+                            {f.errorsCount > 0 ? `${f.errorsCount} erro(s)` : ""})
+                          </span>
                         )}
                       </>
                     )}
-                  </td>
-                  <td className="px-5 py-2.5">
-                    <Badge value={f.status} />
-                  </td>
-                  <td className="px-5 py-2.5">{new Date(f.createdAt).toLocaleDateString("pt-BR")}</td>
-                  <td className="px-5 py-2.5">
-                    <div className="flex justify-end gap-2">
-                      {f.status !== "duplicado" && (
-                        <button type="button" onClick={() => onOpenDetail(f)} className="rounded-md border px-3 py-1.5">
-                          Ver detalhe
-                        </button>
-                      )}
-                      <button type="button" onClick={() => onRemove(f)} className="rounded-md border border-red-200 px-3 py-1.5 text-red-700">
-                        Excluir
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+                  </span>
+                  <span>
+                    <span className="mr-1 text-xs uppercase text-muted">Data da importação:</span>
+                    {new Date(f.createdAt).toLocaleDateString("pt-BR")}{" "}
+                    {new Date(f.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <span>
+                    <span className="mr-1 text-xs uppercase text-muted">Usuário:</span>
+                    {f.uploadedBy?.name || f.uploadedBy?.email || "—"}
+                  </span>
+                </div>
+
+                {err !== "—" && (
+                  <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    <span className="font-semibold">Erro: </span>
+                    {err}
+                  </div>
+                )}
+              </div>
+            );
+          })}
       </div>
     );
   }

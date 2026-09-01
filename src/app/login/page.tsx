@@ -103,7 +103,7 @@ export default function LoginPage() {
         </button>
 
         <p className="mt-6 text-center text-xs text-muted">
-          Demo: admin@projeto-ms.local / Senha: Amin@123456
+          Demo: admin@projeto-ms.local / Senha: trocar-esta-senha
         </p>
       </div>
     </main>

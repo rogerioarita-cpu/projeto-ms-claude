@@ -42,7 +42,8 @@ export function parseLeadPayload(body: any) {
   const addressState = body.addressState ? String(body.addressState).trim().toUpperCase() : null;
 
   if (!companyName) throw new Error("A razão social é obrigatória.");
-  if (body.cnpj && !CNPJ_RE.test(cnpjDigits)) throw new Error("O CNPJ deve ter 14 dígitos.");
+  if (!body.cnpj || !cnpjDigits) throw new Error("O CNPJ é obrigatório.");
+  if (!CNPJ_RE.test(cnpjDigits)) throw new Error("O CNPJ deve ter 14 dígitos.");
   if (companyType && !COMPANY_TYPE_VALUES.includes(companyType as (typeof COMPANY_TYPE_VALUES)[number])) {
     throw new Error("Tipo de empresa inválido.");
   }
@@ -54,7 +55,7 @@ export function parseLeadPayload(body: any) {
 
   return {
     companyName,
-    cnpj: body.cnpj ? cnpjDigits : null,
+    cnpj: cnpjDigits,
     companyType: companyType as (typeof COMPANY_TYPE_VALUES)[number] | null,
     contactName,
     contactEmail,

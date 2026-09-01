@@ -60,8 +60,32 @@ const STATUS_OPTIONS: { key: LeadStatus; label: string }[] = [
   { key: "cancelado", label: "Cancelado" },
 ];
 
-const COMPANY_TYPES: { value: CompanyType; label: string }[] = [
-  { value: "industria", label: "Indústria" },
+type DocumentItem = {
+  id: string;
+  leadId: string;
+  type: "procuracao" | "nda" | "contrato" | "aditivo" | "outro";
+  status: "enviado" | "pendente" | "validado" | "rejeitado";
+  version: number;
+};
+
+// Mesmos 4 tipos de documento acompanhados na tela de Workflow e acompanhamento (PRD 6.8).
+const TRACKED_DOC_TYPES: { value: DocumentItem["type"]; label: string }[] = [
+  { value: "procuracao", label: "Procuração" },
+  { value: "nda", label: "NDA" },
+  { value: "contrato", label: "Contrato" },
+  { value: "aditivo", label: "Aditivo" },
+];
+
+function latestDocsByType(documents: DocumentItem[], leadId: string) {
+  const leadDocs = documents.filter((d) => d.leadId === leadId);
+  return TRACKED_DOC_TYPES.map((t) => {
+    const versions = leadDocs.filter((d) => d.type === t.value);
+    const latest = versions.reduce<DocumentItem | null>((acc, d) => (!acc || d.version > acc.version ? d : acc), null);
+    return { type: t.value, label: t.label, status: latest?.status ?? "pendente" };
+  });
+}
+
+const COMPANY_TYPES: { value: CompanyType; label: string }[] = [  { value: "industria", label: "Indústria" },
   { value: "comercio", label: "Comércio" },
   { value: "revenda", label: "Revenda" },
   { value: "servicos", label: "Serviços" },
@@ -149,15 +173,20 @@ export default function LeadsPage() {
   const [onlyClients, setOnlyClients] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [formTab, setFormTab] = useState<"geral" | "endereco">("geral");
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
 
   async function load() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/leads", { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao carregar leads.");
+      const [leadsRes, docsRes] = await Promise.all([
+        fetch("/api/leads", { cache: "no-store" }),
+        fetch("/api/documentos", { cache: "no-store" }),
+      ]);
+      const data = await leadsRes.json();
+      if (!leadsRes.ok) throw new Error(data.error || "Erro ao carregar leads.");
       setLeads(data);
+      if (docsRes.ok) setDocuments(await docsRes.json());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar leads.");
     } finally {
@@ -206,7 +235,7 @@ export default function LeadsPage() {
     const errs: Partial<Record<keyof FormData, string>> = {};
     if (!form.companyName.trim()) errs.companyName = "Campo obrigatório.";
     const cnpjDigits = form.cnpj.replace(/\D/g, "");
-    if (form.cnpj && cnpjDigits.length !== 14) errs.cnpj = "O CNPJ deve ter 14 dígitos.";
+    if (!form.cnpj || cnpjDigits.length !== 14) errs.cnpj = "O CNPJ é obrigatório e deve ter 14 dígitos.";
     if (form.contactEmail && !isEmailValid(form.contactEmail)) errs.contactEmail = "E-mail inválido.";
     if (form.estimatedValue && (Number.isNaN(Number(form.estimatedValue)) || Number(form.estimatedValue) < 0)) {
       errs.estimatedValue = "Informe um valor numérico válido.";
@@ -369,8 +398,9 @@ export default function LeadsPage() {
                   {fieldErrors.companyName && <span className="mt-1 block text-xs text-red-600">{fieldErrors.companyName}</span>}
                 </label>
                 <label>
-                  <span className="mb-1 block text-sm font-medium">CNPJ</span>
+                  <span className="mb-1 block text-sm font-medium">CNPJ *</span>
                   <input
+                    required
                     value={form.cnpj}
                     onChange={(e) => setForm({ ...form, cnpj: formatCnpj(e.target.value) })}
                     className={`w-full rounded-md border px-3 py-2 ${fieldErrors.cnpj ? "border-red-400" : ""}`}
@@ -431,7 +461,7 @@ export default function LeadsPage() {
                   {fieldErrors.estimatedValue && <span className="mt-1 block text-xs text-red-600">{fieldErrors.estimatedValue}</span>}
                 </label>
 
-                <div className="flex flex-wrap items-center gap-6 md:col-span-4">
+                <div className="flex flex-wrap items-center gap-6 md:col-span-3">
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={form.procurationSigned} onChange={(e) => setForm({ ...form, procurationSigned: e.target.checked })} />
                     <span className="text-sm font-medium">Procuração assinada</span>
@@ -639,6 +669,17 @@ export default function LeadsPage() {
                                 </ul>
                               </div>
                             )}
+                            <div className="border-t border-border pt-3">
+                              <p className="mb-1.5 text-xs font-medium text-muted">Documentos</p>
+                              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                {latestDocsByType(documents, lead.id).map((d) => (
+                                  <span key={d.type} className="flex items-center gap-1 text-xs">
+                                    <span className="text-muted">{d.label}:</span>
+                                    <Badge value={d.status} />
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                           <div className="flex flex-col gap-2 sm:flex-row md:flex-col md:items-end">
                             <select
