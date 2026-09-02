@@ -3,9 +3,10 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { authOptions } from "@/server/auth";
-import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/server/require-admin";
 import { ROLE_VALUES } from "@/lib/role-options";
+import { getTenantId, forTenant, handleTenantError } from "@/server/tenant";
+import { withPlatformBypass } from "@/server/tenant-db";
 
 const STATUS_VALUES = ["ativo", "inativo", "bloqueado"] as const;
 
@@ -26,7 +27,9 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
-    const users = await prisma.user.findMany({
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
+    const users = await db.user.findMany({
       orderBy: { createdAt: "desc" },
       include: { roles: true, linkedLead: true },
     });
@@ -45,6 +48,8 @@ export async function GET() {
       }))
     );
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("GET /api/users", error);
     return NextResponse.json({ error: "Não foi possível carregar os usuários." }, { status: 500 });
   }
@@ -67,20 +72,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Selecione o Lead/Cliente vinculado para o perfil Lead/Cliente." }, { status: 400 });
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } });
+    // E-mail é único globalmente (não por tenant — ver PRD seção 6.3), então
+    // esta checagem usa bypass de RLS de propósito (precisa enxergar todos os tenants).
+    const existing = await withPlatformBypass((tx) => tx.user.findUnique({ where: { email } }));
     if (existing) {
       return NextResponse.json({ error: "Já existe um usuário com esse e-mail." }, { status: 409 });
     }
 
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
+
+    if (roles.includes("lead_cliente") && linkedLeadId) {
+      // Garante que o Lead/Cliente vinculado pertence ao mesmo tenant do admin.
+      const linkedLead = await db.lead.findUnique({ where: { id: linkedLeadId } });
+      if (!linkedLead) return NextResponse.json({ error: "Lead/Cliente vinculado não encontrado." }, { status: 400 });
+    }
+
     const passwordHash = password ? await bcrypt.hash(password, 10) : null;
 
-    const user = await prisma.user.create({
+    const user = await db.user.create({
       data: {
         name,
         email,
         passwordHash,
         status: status ?? "ativo",
         linkedLeadId: roles.includes("lead_cliente") ? linkedLeadId || null : null,
+        tenantId,
         roles: { create: roles.map((role) => ({ role })) },
       },
       include: { roles: true },
@@ -96,6 +113,8 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("POST /api/users", error);
     return NextResponse.json({ error: "Não foi possível cadastrar o usuário." }, { status: 500 });
   }

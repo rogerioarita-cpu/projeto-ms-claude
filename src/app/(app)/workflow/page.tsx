@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/layout/AppShell";
-import { prisma } from "@/lib/prisma";
 import { WorkflowAccordion, type WorkflowItem } from "@/components/workflow/WorkflowAccordion";
 import { getLeadScopeFilter } from "@/server/session-scope";
+import { getTenantId, forTenant } from "@/server/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -30,14 +30,19 @@ function onlyDigits(v: string | null) {
 }
 
 export default async function WorkflowPage() {
+  const tenantId = await getTenantId();
+  const db = forTenant(tenantId);
   const leadScope = await getLeadScopeFilter();
-  const leads = await prisma.lead.findMany({
+  const leads = await db.lead.findMany({
     where: leadScope ? { id: leadScope } : undefined,
     orderBy: { createdAt: "desc" },
   });
-  const spedFiles = await prisma.spedFile.findMany({ select: { cnpj: true } });
-  const analises = await prisma.analiseFiscal.findMany({ select: { leadId: true, status: true } });
-  const documents = await prisma.document.findMany({
+  // Escopado por tenant: antes buscava TODOS os arquivos SPED do banco (de
+  // qualquer tenant) só para checar CNPJ — o que vazaria, mesmo que só como
+  // booleano, se outro tenant já importou arquivo para aquele CNPJ.
+  const spedFiles = await db.spedFile.findMany({ select: { cnpj: true } });
+  const analises = await db.analiseFiscal.findMany({ select: { leadId: true, status: true } });
+  const documents = await db.document.findMany({
     where: {
       type: { in: TRACKED_DOC_TYPES.map((t) => t.value) },
       ...(leadScope ? { leadId: leadScope } : {}),

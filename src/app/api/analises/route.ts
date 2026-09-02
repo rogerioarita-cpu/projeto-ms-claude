@@ -1,20 +1,24 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getLeadScopeFilter, isReadOnlySession } from "@/server/session-scope";
+import { getTenantId, forTenant, handleTenantError } from "@/server/tenant";
 
 const TAX_TYPES = ["pis_cofins", "icms", "ipi", "irpj_csll", "outros"] as const;
 const STATUSES = ["em_andamento", "concluida", "aprovada", "rejeitada"] as const;
 
 export async function GET() {
   try {
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
     const leadScope = await getLeadScopeFilter();
-    const analises = await prisma.analiseFiscal.findMany({
+    const analises = await db.analiseFiscal.findMany({
       where: leadScope ? { leadId: leadScope } : undefined,
       orderBy: { createdAt: "desc" },
       include: { lead: true, analyst: true, checklist: { orderBy: { order: "asc" } }, approvals: true },
     });
     return NextResponse.json(analises);
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("GET /api/analises", error);
     return NextResponse.json({ error: "Não foi possível carregar as análises fiscais." }, { status: 500 });
   }
@@ -25,6 +29,9 @@ export async function POST(request: Request) {
     if (await isReadOnlySession()) {
       return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
     }
+
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
 
     const body = await request.json();
     const leadId = String(body.leadId ?? "");
@@ -45,10 +52,11 @@ export async function POST(request: Request) {
     if (!STATUSES.includes(status as (typeof STATUSES)[number])) return NextResponse.json({ error: "Status inválido." }, { status: 400 });
     if (!Number.isFinite(estimatedCredit) || estimatedCredit < 0) return NextResponse.json({ error: "O crédito estimado deve ser um número maior ou igual a zero." }, { status: 400 });
 
-    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+    // Filtro de tenant embutido em `db`: um leadId de outro tenant não é encontrado aqui.
+    const lead = await db.lead.findUnique({ where: { id: leadId } });
     if (!lead) return NextResponse.json({ error: "Lead não encontrado." }, { status: 400 });
 
-    const analise = await prisma.analiseFiscal.create({
+    const analise = await db.analiseFiscal.create({
       data: {
         leadId,
         taxType: taxType as (typeof TAX_TYPES)[number],
@@ -59,6 +67,7 @@ export async function POST(request: Request) {
         status: status as (typeof STATUSES)[number],
         diagnosis,
         analystId,
+        tenantId,
         checklist: { create: checklist.map((description, order) => ({ description: description.trim(), order })) },
       },
       include: { lead: true, analyst: true, checklist: { orderBy: { order: "asc" } }, approvals: true },
@@ -66,6 +75,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(analise, { status: 201 });
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("POST /api/analises", error);
     return NextResponse.json({ error: "Não foi possível cadastrar a análise fiscal." }, { status: 500 });
   }

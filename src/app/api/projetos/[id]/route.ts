@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isReadOnlySession } from "@/server/session-scope";
+import { getTenantId, forTenant, handleTenantError } from "@/server/tenant";
 
 const validStatuses = [
   "planejamento",
@@ -42,18 +42,20 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
     }
 
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
     const body = await request.json();
     const data = parsePayload(body);
 
-    const existing = await prisma.project.findUnique({ where: { id: params.id } });
+    const existing = await db.project.findUnique({ where: { id: params.id } });
     if (!existing) return NextResponse.json({ error: "Projeto não encontrado." }, { status: 404 });
 
     if (data.leadId) {
-      const lead = await prisma.lead.findUnique({ where: { id: data.leadId } });
+      const lead = await db.lead.findUnique({ where: { id: data.leadId } });
       if (!lead) return NextResponse.json({ error: "Lead não encontrado." }, { status: 400 });
     }
 
-    const project = await prisma.project.update({
+    const project = await db.project.update({
       where: { id: params.id },
       data,
       include: { lead: true },
@@ -61,6 +63,8 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
     return NextResponse.json(project);
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     const message = error instanceof Error ? error.message : "Não foi possível atualizar o projeto.";
     const status = message.includes("obrigatório") || message.includes("inválido") || message.includes("não pode") ? 400 : 500;
     console.error("PUT /api/projetos/[id]", error);
@@ -74,7 +78,9 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
       return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
     }
 
-    const existing = await prisma.project.findUnique({
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
+    const existing = await db.project.findUnique({
       where: { id: params.id },
       include: {
         _count: { select: { documents: true, inconsistencies: true, taxCredits: true } },
@@ -91,9 +97,11 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
       );
     }
 
-    await prisma.project.delete({ where: { id: params.id } });
+    await db.project.delete({ where: { id: params.id } });
     return NextResponse.json({ success: true });
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("DELETE /api/projetos/[id]", error);
     return NextResponse.json({ error: "Não foi possível excluir o projeto." }, { status: 500 });
   }

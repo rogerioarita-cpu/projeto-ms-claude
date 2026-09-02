@@ -17,6 +17,7 @@ export const config = {
     "/usuarios/:path*",
     "/analise/:path*",
     "/aprovacoes/:path*",
+    "/plataforma/:path*",
 
     "/api/projetos/:path*",
     "/api/sped/:path*",
@@ -27,5 +28,6 @@ export const config = {
     "/api/analises/:path*",
     "/api/aprovacoes/:path*",
     "/api/checklist/:path*",
+    "/api/plataforma/:path*",
   ],
 };

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isReadOnlySession } from "@/server/session-scope";
+import { getTenantId, forTenant, handleTenantError } from "@/server/tenant";
 
 const TAX_TYPES = ["pis_cofins", "icms", "ipi", "irpj_csll", "outros"] as const;
 const STATUSES = ["em_andamento", "concluida", "aprovada", "rejeitada"] as const;
@@ -8,13 +8,17 @@ const APPROVAL_AREAS = ["juridico", "financeiro", "comercial", "concorrencia"] a
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
   try {
-    const analise = await prisma.analiseFiscal.findUnique({
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
+    const analise = await db.analiseFiscal.findUnique({
       where: { id: params.id },
       include: { lead: true, analyst: true, checklist: { orderBy: { order: "asc" } }, approvals: true },
     });
     if (!analise) return NextResponse.json({ error: "Análise não encontrada." }, { status: 404 });
     return NextResponse.json(analise);
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("GET /api/analises/[id]", error);
     return NextResponse.json({ error: "Não foi possível carregar a análise." }, { status: 500 });
   }
@@ -25,6 +29,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     if (await isReadOnlySession()) {
       return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
     }
+
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
 
     const body = await request.json();
     const taxType = String(body.taxType ?? "");
@@ -41,10 +48,10 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     if (!STATUSES.includes(status as (typeof STATUSES)[number])) return NextResponse.json({ error: "Status inválido." }, { status: 400 });
     if (!Number.isFinite(estimatedCredit) || estimatedCredit < 0) return NextResponse.json({ error: "O crédito estimado deve ser um número maior ou igual a zero." }, { status: 400 });
 
-    const existing = await prisma.analiseFiscal.findUnique({ where: { id: params.id } });
+    const existing = await db.analiseFiscal.findUnique({ where: { id: params.id } });
     if (!existing) return NextResponse.json({ error: "Análise não encontrada." }, { status: 404 });
 
-    const analise = await prisma.analiseFiscal.update({
+    const analise = await db.analiseFiscal.update({
       where: { id: params.id },
       data: { taxType: taxType as (typeof TAX_TYPES)[number], thesis, periodStart, periodEnd, estimatedCredit, status: status as (typeof STATUSES)[number], diagnosis, analystId },
       include: { lead: true, analyst: true, checklist: { orderBy: { order: "asc" } }, approvals: true },
@@ -52,19 +59,21 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
     // PRD 6.9: ao concluir a análise, abre-se automaticamente a votação das 4 áreas.
     if (status === "concluida" && existing.status !== "concluida") {
-      await prisma.aprovacao.createMany({
-        data: APPROVAL_AREAS.map((area) => ({ leadId: analise.leadId, analiseId: analise.id, area })),
+      await db.aprovacao.createMany({
+        data: APPROVAL_AREAS.map((area) => ({ leadId: analise.leadId, analiseId: analise.id, area, tenantId })),
         skipDuplicates: true,
       });
     }
 
-    const refreshed = await prisma.analiseFiscal.findUnique({
+    const refreshed = await db.analiseFiscal.findUnique({
       where: { id: params.id },
       include: { lead: true, analyst: true, checklist: { orderBy: { order: "asc" } }, approvals: true },
     });
 
     return NextResponse.json(refreshed);
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("PUT /api/analises/[id]", error);
     return NextResponse.json({ error: "Não foi possível atualizar a análise." }, { status: 500 });
   }
@@ -76,11 +85,15 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
       return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
     }
 
-    const existing = await prisma.analiseFiscal.findUnique({ where: { id: params.id } });
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
+    const existing = await db.analiseFiscal.findUnique({ where: { id: params.id } });
     if (!existing) return NextResponse.json({ error: "Análise não encontrada." }, { status: 404 });
-    await prisma.analiseFiscal.delete({ where: { id: params.id } });
+    await db.analiseFiscal.delete({ where: { id: params.id } });
     return NextResponse.json({ success: true });
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("DELETE /api/analises/[id]", error);
     return NextResponse.json({ error: "Não foi possível excluir a análise." }, { status: 500 });
   }

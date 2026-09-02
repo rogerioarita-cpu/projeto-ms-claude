@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { withPlatformBypass } from "@/server/tenant-db";
 
 export async function POST(request: Request) {
   try {
@@ -11,7 +11,9 @@ export async function POST(request: Request) {
     if (!email) return NextResponse.json({ error: "Informe o e-mail." }, { status: 400 });
     if (password.length < 8) return NextResponse.json({ error: "A senha deve ter pelo menos 8 caracteres." }, { status: 400 });
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    // Fluxo de primeiro acesso: acontece sem sessão (o usuário ainda não logou),
+    // por isso usa bypass de RLS — busca por e-mail exato, não por listagem.
+    const user = await withPlatformBypass((tx) => tx.user.findUnique({ where: { email } }));
     if (!user) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
     if (user.passwordHash) {
       return NextResponse.json({ error: "Este usuário já possui senha cadastrada. Peça a um administrador para redefinir." }, { status: 400 });
@@ -20,7 +22,7 @@ export async function POST(request: Request) {
     if (user.status === "inativo") return NextResponse.json({ error: "Este usuário está inativo." }, { status: 403 });
 
     const passwordHash = await bcrypt.hash(password, 10);
-    await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+    await withPlatformBypass((tx) => tx.user.update({ where: { id: user.id }, data: { passwordHash } }));
 
     return NextResponse.json({ success: true });
   } catch (error) {

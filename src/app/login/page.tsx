@@ -9,6 +9,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalido: "E-mail ou senha inválidos.",
   bloqueado: "Este usuário está bloqueado. Fale com um administrador.",
   inativo: "Este usuário está inativo. Fale com um administrador.",
+  tenant_suspenso: "O acesso da sua organização está suspenso. Fale com o suporte.",
   sem_senha: "sem_senha", // tratado à parte (mostra link para cadastro de senha)
 };
 

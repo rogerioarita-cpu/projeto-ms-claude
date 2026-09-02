@@ -3,14 +3,16 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
 import { UserForm } from "@/components/users/UserForm";
 import { requireAdminSession } from "@/server/require-admin";
-import { prisma } from "@/lib/prisma";
 import type { RoleValue } from "@/lib/role-options";
+import { getTenantId, forTenant } from "@/server/tenant";
 
 export default async function EditarUsuarioPage({ params }: { params: { id: string } }) {
   const session = await requireAdminSession();
   if (!session) redirect("/dashboard");
 
-  const user = await prisma.user.findUnique({
+  const tenantId = await getTenantId();
+  const db = forTenant(tenantId);
+  const user = await db.user.findUnique({
     where: { id: params.id },
     include: { roles: true },
   });

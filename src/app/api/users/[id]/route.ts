@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/server/require-admin";
 import { ROLE_VALUES } from "@/lib/role-options";
+import { getTenantId, forTenant, handleTenantError } from "@/server/tenant";
+import { withPlatformBypass } from "@/server/tenant-db";
 
 const STATUS_VALUES = ["ativo", "inativo", "bloqueado"] as const;
 
@@ -21,7 +22,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     const session = await requireAdminSession();
     if (!session) return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
 
-    const user = await prisma.user.findUnique({
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
+    const user = await db.user.findUnique({
       where: { id: params.id },
       include: { roles: true, linkedLead: true },
     });
@@ -37,6 +40,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       roles: user.roles.map((r) => r.role),
     });
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("GET /api/users/[id]", error);
     return NextResponse.json({ error: "Não foi possível carregar o usuário." }, { status: 500 });
   }
@@ -59,12 +64,21 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: "Selecione o Lead/Cliente vinculado para o perfil Lead/Cliente." }, { status: 400 });
     }
 
-    const target = await prisma.user.findUnique({ where: { id: params.id } });
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
+
+    const target = await db.user.findUnique({ where: { id: params.id } });
     if (!target) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
 
-    const emailOwner = await prisma.user.findUnique({ where: { email } });
+    // E-mail é único globalmente (ver PRD seção 6.3) — usa bypass de RLS de propósito.
+    const emailOwner = await withPlatformBypass((tx) => tx.user.findUnique({ where: { email } }));
     if (emailOwner && emailOwner.id !== params.id) {
       return NextResponse.json({ error: "Esse e-mail já está em uso por outro usuário." }, { status: 409 });
+    }
+
+    if (roles.includes("lead_cliente") && linkedLeadId) {
+      const linkedLead = await db.lead.findUnique({ where: { id: linkedLeadId } });
+      if (!linkedLead) return NextResponse.json({ error: "Lead/Cliente vinculado não encontrado." }, { status: 400 });
     }
 
     // Impede o admin de remover o próprio papel de admin, se bloquear ou desativar a si mesmo.
@@ -78,7 +92,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       }
     }
 
-    await prisma.$transaction(async (tx) => {
+    await db.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: params.id },
         data: {
@@ -98,6 +112,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("PATCH /api/users/[id]", error);
     return NextResponse.json({ error: "Não foi possível atualizar o usuário." }, { status: 500 });
   }
@@ -113,12 +129,16 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
       return NextResponse.json({ error: "Você não pode excluir seu próprio usuário." }, { status: 400 });
     }
 
-    const target = await prisma.user.findUnique({ where: { id: params.id } });
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
+    const target = await db.user.findUnique({ where: { id: params.id } });
     if (!target) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
 
-    await prisma.user.delete({ where: { id: params.id } });
+    await db.user.delete({ where: { id: params.id } });
     return NextResponse.json({ ok: true });
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("DELETE /api/users/[id]", error);
     return NextResponse.json({ error: "Não foi possível excluir o usuário." }, { status: 500 });
   }

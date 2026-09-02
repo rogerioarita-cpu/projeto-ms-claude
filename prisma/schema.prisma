@@ -11,6 +11,44 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------
+// MULTI-TENANCY (PRD — Implantação de Multi-Tenancy, Fase 0)
+// ---------------------------------------------------------------------
+// Fase 0: `tenantId` é opcional em todas as tabelas de negócio. A aplicação
+// ainda NÃO impõe o isolamento (isso é Fase 1 do PRD) — este é só o passo de
+// schema + migração + backfill dos dados já existentes para um tenant padrão.
+
+enum TenantStatus {
+  ativo
+  suspenso
+  cancelado
+
+  @@map("tenant_status")
+}
+
+model Tenant {
+  id        String       @id @default(cuid())
+  name      String
+  slug      String       @unique
+  status    TenantStatus @default(ativo)
+  plan      String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  users           User[]
+  leads           Lead[]
+  projects        Project[]
+  documents       Document[]
+  spedFiles       SpedFile[]
+  analises        AnaliseFiscal[]
+  aprovacoes      Aprovacao[]
+  taxCredits      TaxCredit[]
+  inconsistencies Inconsistency[]
+  clientFlagLogs  LeadClientFlagLog[]
+
+  @@map("tenants")
+}
+
+// ---------------------------------------------------------------------
 // AUTENTICAÇÃO (NextAuth — modelo padrão adaptado)
 // ---------------------------------------------------------------------
 
@@ -43,6 +81,12 @@ model User {
   lastAccessAt  DateTime? // "último acesso" (PRD 6.10)
   linkedLeadId  String? // Lead/Cliente vinculado — obrigatório para o perfil lead_cliente
   linkedLead    Lead?      @relation("LeadClientUser", fields: [linkedLeadId], references: [id], onDelete: SetNull)
+  tenantId      String   // Multi-tenancy — obrigatório a partir da Fase 1 do PRD
+  tenant        Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  // PRD — Fase 3 (Provisionamento): flag global, fora do RBAC de um tenant
+  // específico — não é um AppRole. Só um super-admin da plataforma pode criar
+  // novos tenants e seus primeiros administradores.
+  isPlatformSuperAdmin Boolean @default(false)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -55,6 +99,7 @@ model User {
   analises   AnaliseFiscal[] @relation("AnaliseAnalyst")
   leadClientFlagChanges LeadClientFlagLog[] @relation("LeadClientFlagChangedBy")
 
+  @@index([tenantId])
   @@map("users")
 }
 
@@ -164,6 +209,8 @@ model Lead {
   notes          String?
   ownerId        String?
   owner          User?       @relation("LeadOwner", fields: [ownerId], references: [id])
+  tenantId       String  // Multi-tenancy — obrigatório a partir da Fase 1 do PRD
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -175,6 +222,8 @@ model Lead {
   clientFlagLogs  LeadClientFlagLog[]
   clientUsers     User[]              @relation("LeadClientUser")
 
+  @@index([tenantId])
+  @@index([tenantId, status])
   @@map("leads")
 }
 
@@ -188,8 +237,11 @@ model LeadClientFlagLog {
   changedById String?
   changedBy   User?    @relation("LeadClientFlagChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
   changedAt   DateTime @default(now())
+  tenantId    String  // Multi-tenancy — obrigatório a partir da Fase 1 do PRD
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([leadId])
+  @@index([tenantId])
   @@map("lead_client_flag_logs")
 }
 
@@ -212,6 +264,8 @@ model Project {
   periodStart       DateTime?
   periodEnd         DateTime?
   prescriptionDate  DateTime? // controle de prescrição (5 anos)
+  tenantId          String  // Multi-tenancy — obrigatório a partir da Fase 1 do PRD
+  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -220,6 +274,7 @@ model Project {
   taxCredits       TaxCredit[]
   spedFiles        SpedFile[]
 
+  @@index([tenantId])
   @@map("projects")
 }
 
@@ -259,9 +314,12 @@ model Document {
   note         String?
   uploadedById String?
   uploadedBy   User?     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  tenantId     String  // Multi-tenancy — obrigatório a partir da Fase 1 do PRD
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   createdAt    DateTime  @default(now())
 
   @@index([leadId])
+  @@index([tenantId])
   @@map("documents")
 }
 
@@ -280,8 +338,11 @@ model Inconsistency {
   description String
   severity    Severity @default(media)
   resolved    Boolean  @default(false)
+  tenantId    String  // Multi-tenancy — obrigatório a partir da Fase 1 do PRD
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   createdAt   DateTime @default(now())
 
+  @@index([tenantId])
   @@map("inconsistencies")
 }
 
@@ -303,9 +364,12 @@ model TaxCredit {
   amount      Decimal      @default(0) @db.Decimal(14, 2)
   status      CreditStatus @default(identificado)
   competence  DateTime?
+  tenantId    String  // Multi-tenancy — obrigatório a partir da Fase 1 do PRD
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
+  @@index([tenantId])
   @@map("tax_credits")
 }
 
@@ -360,6 +424,8 @@ model SpedFile {
 
   uploadedById String?
   uploadedBy   User?    @relation("SpedFileUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  tenantId     String  // Multi-tenancy — obrigatório a partir da Fase 1 do PRD
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   createdAt    DateTime @default(now())
 
   // Preenchido quando status = 'duplicado': aponta para o arquivo já importado anteriormente
@@ -369,6 +435,7 @@ model SpedFile {
   @@index([projectId])
   @@index([leadId])
   @@index([type])
+  @@index([tenantId])
   @@map("sped_files")
 }
 
@@ -408,6 +475,8 @@ model AnaliseFiscal {
   diagnosis       String?
   analystId       String?
   analyst         User?         @relation("AnaliseAnalyst", fields: [analystId], references: [id], onDelete: SetNull)
+  tenantId        String  // Multi-tenancy — obrigatório a partir da Fase 1 do PRD
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -415,6 +484,7 @@ model AnaliseFiscal {
   approvals Aprovacao[]
 
   @@index([leadId])
+  @@index([tenantId])
   @@map("analises_fiscais")
 }
 
@@ -462,9 +532,12 @@ model Aprovacao {
   decidedBy  String?
   decidedAt  DateTime?
   note       String? // obrigatória em caso de rejeição (validado na aplicação)
+  tenantId   String  // Multi-tenancy — obrigatório a partir da Fase 1 do PRD
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   createdAt  DateTime       @default(now())
 
   @@unique([analiseId, area])
   @@index([leadId])
+  @@index([tenantId])
   @@map("aprovacoes")
 }

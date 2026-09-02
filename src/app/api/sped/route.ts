@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/server/auth";
-import { prisma } from "@/lib/prisma";
 import { parseSpedFile, sniffSpedFileType, toSpedFileRecord } from "@/lib/sped/parse";
 import type { SpedFileTypeValue } from "@/lib/sped/types";
 import { isReadOnlySession, getLeadScopeFilter } from "@/server/session-scope";
+import { getTenantId, forTenant, handleTenantError, type TenantPrisma } from "@/server/tenant";
 
 const LABELS: Record<SpedFileTypeValue, string> = {
   efd_icms_ipi: "EFD ICMS/IPI",
@@ -23,6 +23,8 @@ function onlyDigits(v: string | null | undefined) {
 
 export async function GET(request: Request) {
   try {
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
     const leadScope = await getLeadScopeFilter();
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get("projectId");
@@ -31,7 +33,7 @@ export async function GET(request: Request) {
     const type = searchParams.get("type");
     const status = searchParams.get("status");
 
-    const files = await prisma.spedFile.findMany({
+    const files = await db.spedFile.findMany({
       where: {
         ...(projectId ? { projectId } : {}),
         ...(leadId ? { leadId } : {}),
@@ -48,6 +50,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json(files);
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("GET /api/sped", error);
     return NextResponse.json({ error: "Não foi possível carregar os arquivos SPED importados." }, { status: 500 });
   }
@@ -56,7 +60,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   // Estado da tentativa de importação, preenchido conforme o parsing avança —
   // usado por `recordFailedImport` para gravar a ocorrência assim que os dados
-  // mínimos (lead + arquivo) estiverem disponíveis, mesmo que a importação falhe depois.
+  // mínimos (tenant + lead + arquivo) estiverem disponíveis, mesmo que a
+  // importação falhe depois.
+  let dbRef: TenantPrisma | null = null;
+  let tenantIdAttempt: string | null = null;
   let leadIdAttempt: string | null = null;
   let projectIdAttempt: string | null = null;
   let typeAttempt: SpedFileTypeValue | null = null;
@@ -67,13 +74,13 @@ export async function POST(request: Request) {
 
   // Grava a tentativa de importação como "erro", com o lead, o nome do arquivo,
   // a mensagem de erro e os dados de log (quem tentou importar e quando —
-  // este último via `createdAt`, automático). Só grava quando já temos lead e
-  // arquivo identificados; falhas antes disso (ex.: nenhum lead selecionado)
-  // não geram registro, pois não há o que auditar.
+  // este último via `createdAt`, automático). Só grava quando já temos tenant,
+  // lead e arquivo identificados; falhas antes disso (ex.: nenhum lead
+  // selecionado, ou sessão sem tenant) não geram registro, pois não há o que auditar.
   async function recordFailedImport(errorMessage: string) {
-    if (!leadIdAttempt || !fileNameAttempt) return;
+    if (!dbRef || !tenantIdAttempt || !leadIdAttempt || !fileNameAttempt) return;
     try {
-      await prisma.spedFile.create({
+      await dbRef.spedFile.create({
         data: {
           type: typeAttempt ?? "efd_icms_ipi",
           status: "erro",
@@ -92,6 +99,7 @@ export async function POST(request: Request) {
           leadId: leadIdAttempt,
           projectId: projectIdAttempt,
           uploadedById: uploadedByIdAttempt ?? null,
+          tenantId: tenantIdAttempt,
         },
       });
     } catch (logError) {
@@ -104,6 +112,11 @@ export async function POST(request: Request) {
     if (await isReadOnlySession()) {
       return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
     }
+
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
+    dbRef = db;
+    tenantIdAttempt = tenantId;
 
     const contentType = request.headers.get("content-type") || "";
     if (!contentType.includes("multipart/form-data")) {
@@ -133,8 +146,9 @@ export async function POST(request: Request) {
 
     // Confirma a existência do lead ANTES de qualquer outra validação: as demais
     // checagens abaixo podem gravar um registro de "importação com erro", que
-    // exige um leadId válido (chave estrangeira obrigatória).
-    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+    // exige um leadId válido (chave estrangeira obrigatória). Como `db` já filtra
+    // por tenant, um leadId de outro tenant simplesmente não é encontrado aqui.
+    const lead = await db.lead.findUnique({ where: { id: leadId } });
     if (!lead) {
       return NextResponse.json({ error: "Lead não encontrado." }, { status: 400 });
     }
@@ -159,7 +173,7 @@ export async function POST(request: Request) {
     }
 
     if (projectId) {
-      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      const project = await db.project.findUnique({ where: { id: projectId } });
       if (!project) {
         const msg = "Projeto não encontrado.";
         await recordFailedImport(msg);
@@ -203,9 +217,10 @@ export async function POST(request: Request) {
 
     // Verifica se já existe uma importação bem-sucedida do mesmo arquivo: mesmo CNPJ,
     // mesmo tipo (EFD ICMS/IPI ou Contribuições) e mesmo período de apuração.
+    // (a busca já é restrita ao tenant atual pelo `db`)
     const recordCnpjDigits = onlyDigits(record.cnpj);
     if (recordCnpjDigits) {
-      const candidates = await prisma.spedFile.findMany({
+      const candidates = await db.spedFile.findMany({
         where: {
           type: type as SpedFileTypeValue,
           periodStart: record.periodStart,
@@ -221,7 +236,7 @@ export async function POST(request: Request) {
 
       if (existing) {
         // Registra a tentativa como "já importado", sem duplicar os dados extraídos.
-        await prisma.spedFile.create({
+        await db.spedFile.create({
           data: {
             type: type as SpedFileTypeValue,
             status: "duplicado",
@@ -237,6 +252,7 @@ export async function POST(request: Request) {
             projectId,
             uploadedById,
             duplicateOfId: existing.id,
+            tenantId,
           },
         });
 
@@ -250,7 +266,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const spedFile = await prisma.spedFile.create({
+    const spedFile = await db.spedFile.create({
       data: {
         ...record,
         extracted: record.extracted ? JSON.parse(JSON.stringify(record.extracted)) : null,
@@ -260,6 +276,7 @@ export async function POST(request: Request) {
         leadId,
         projectId,
         uploadedById,
+        tenantId,
       },
       include: {
         lead: true,
@@ -270,6 +287,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(spedFile, { status: 201 });
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("POST /api/sped", error);
     const msg = error instanceof Error ? error.message : "Não foi possível importar o arquivo SPED.";
     await recordFailedImport(msg);

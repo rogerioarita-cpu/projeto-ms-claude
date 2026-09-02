@@ -1,13 +1,15 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { prisma } from "@/lib/prisma";
 import { brl } from "@/lib/format";
+import { getTenantId, forTenant } from "@/server/tenant";
 
 export const dynamic = "force-dynamic";
 
 export default async function CreditosPage() {
-  const credits = await prisma.taxCredit.findMany({
+  const tenantId = await getTenantId();
+  const db = forTenant(tenantId);
+  const credits = await db.taxCredit.findMany({
     orderBy: { amount: "desc" },
     include: { project: { include: { lead: true } } },
   });

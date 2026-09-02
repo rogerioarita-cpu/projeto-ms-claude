@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SignOutButton } from "./SignOutButton";
 import { SidebarUser } from "./SidebarUser";
+import { SidebarTenantSwitcher } from "./SidebarTenantSwitcher";
 
 const NAV = [
   { href: "/inicio", label: "Início" },
@@ -19,6 +20,7 @@ const NAV = [
   { href: "/creditos", label: "Recuperação de créditos" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/usuarios", label: "Cadastro de usuários" },
+  { href: "/plataforma/tenants", label: "Cadastro de Organizações" },
 ];
 
 export function AppShell({
@@ -36,6 +38,7 @@ export function AppShell({
         <div className="px-5 py-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-gold">Projeto MS</p>
           <p className="mt-0.5 text-sm text-white/70">Auditoria fiscal SPED</p>
+          <SidebarTenantSwitcher />
         </div>
         <nav className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-2">
           {NAV.map((item) => (

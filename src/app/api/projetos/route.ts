@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isReadOnlySession, getLeadScopeFilter } from "@/server/session-scope";
+import { getTenantId, forTenant, handleTenantError } from "@/server/tenant";
 
 const validStatuses = [
   "planejamento",
@@ -42,8 +42,10 @@ function parsePayload(body: any) {
 
 export async function GET() {
   try {
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
     const leadScope = await getLeadScopeFilter();
-    const projects = await prisma.project.findMany({
+    const projects = await db.project.findMany({
       where: leadScope ? { leadId: leadScope } : undefined,
       orderBy: { createdAt: "desc" },
       include: {
@@ -54,6 +56,8 @@ export async function GET() {
 
     return NextResponse.json(projects);
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     console.error("GET /api/projetos", error);
     return NextResponse.json({ error: "Não foi possível carregar os projetos." }, { status: 500 });
   }
@@ -65,21 +69,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Seu perfil (Lead/Cliente) tem acesso somente de consulta." }, { status: 403 });
     }
 
+    const tenantId = await getTenantId();
+    const db = forTenant(tenantId);
     const body = await request.json();
     const data = parsePayload(body);
 
     if (data.leadId) {
-      const lead = await prisma.lead.findUnique({ where: { id: data.leadId } });
+      const lead = await db.lead.findUnique({ where: { id: data.leadId } });
       if (!lead) return NextResponse.json({ error: "Lead não encontrado." }, { status: 400 });
     }
 
-    const project = await prisma.project.create({
-      data,
+    const project = await db.project.create({
+      data: { ...data, tenantId },
       include: { lead: true },
     });
 
     return NextResponse.json(project, { status: 201 });
   } catch (error) {
+    const tenantErr = handleTenantError(error);
+    if (tenantErr) return tenantErr;
     const message = error instanceof Error ? error.message : "Não foi possível criar o projeto.";
     const status = message.includes("obrigatório") || message.includes("inválido") || message.includes("não pode") ? 400 : 500;
     console.error("POST /api/projetos", error);

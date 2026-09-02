@@ -6,9 +6,9 @@ import { DeleteUserButton } from "@/components/users/DeleteUserButton";
 import { UserStatusSelect } from "@/components/users/UserStatusSelect";
 import { UserFilters } from "@/components/users/UserFilters";
 import { ROLE_LABELS, type RoleValue } from "@/lib/role-options";
-import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/server/require-admin";
 import { dateFmt } from "@/lib/format";
+import { getTenantId, forTenant } from "@/server/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,9 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
   const roleFilter = searchParams?.role || "";
   const statusFilter = searchParams?.status || "";
 
-  const allUsers = await prisma.user.findMany({
+  const tenantId = await getTenantId();
+  const db = forTenant(tenantId);
+  const allUsers = await db.user.findMany({
     orderBy: { createdAt: "desc" },
     include: { roles: true, linkedLead: true },
   });

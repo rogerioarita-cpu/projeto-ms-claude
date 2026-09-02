@@ -1,13 +1,13 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { prisma } from "@/lib/prisma";
 import { brl, dateFmt, daysUntil } from "@/lib/format";
 import { getLeadScopeFilter } from "@/server/session-scope";
+import { getTenantId, forTenant, type TenantPrisma } from "@/server/tenant";
 
 export const dynamic = "force-dynamic";
 
-async function getData(leadScope?: string) {
+async function getData(db: TenantPrisma, leadScope?: string) {
   const leadWhere = leadScope ? { id: leadScope } : undefined;
   const analiseWhere = leadScope ? { leadId: leadScope } : undefined;
   const docWhere = leadScope ? { leadId: leadScope } : undefined;
@@ -25,30 +25,30 @@ async function getData(leadScope?: string) {
     topCredits,
     openInconsistencies,
   ] = await Promise.all([
-    prisma.lead.findMany({ where: leadWhere }),
-    prisma.analiseFiscal.count({ where: { ...analiseWhere, status: "em_andamento" } }),
-    prisma.aprovacao.count({ where: { ...aprovacaoWhere, status: "pendente" } }),
-    prisma.document.count({ where: { ...docWhere, status: "pendente" } }),
-    prisma.analiseFiscal.findMany({
+    db.lead.findMany({ where: leadWhere }),
+    db.analiseFiscal.count({ where: { ...analiseWhere, status: "em_andamento" } }),
+    db.aprovacao.count({ where: { ...aprovacaoWhere, status: "pendente" } }),
+    db.document.count({ where: { ...docWhere, status: "pendente" } }),
+    db.analiseFiscal.findMany({
       where: analiseWhere,
       orderBy: { createdAt: "desc" },
       take: 5,
       include: { lead: true },
     }),
-    prisma.taxCredit.aggregate({ _sum: { amount: true }, where: leadScope ? { project: { leadId: leadScope } } : undefined }),
-    prisma.project.findMany({
+    db.taxCredit.aggregate({ _sum: { amount: true }, where: leadScope ? { project: { leadId: leadScope } } : undefined }),
+    db.project.findMany({
       where: { ...projectWhere, prescriptionDate: { not: null } },
       orderBy: { prescriptionDate: "asc" },
       take: 5,
       include: { lead: true },
     }),
-    prisma.taxCredit.findMany({
+    db.taxCredit.findMany({
       where: leadScope ? { project: { leadId: leadScope } } : undefined,
       orderBy: { amount: "desc" },
       take: 5,
       include: { project: { include: { lead: true } } },
     }),
-    prisma.inconsistency.count({ where: { resolved: false, ...(leadScope ? { project: { leadId: leadScope } } : {}) } }),
+    db.inconsistency.count({ where: { resolved: false, ...(leadScope ? { project: { leadId: leadScope } } : {}) } }),
   ]);
 
   const leadsAtivos = leads.filter((l) => l.status !== "aprovado" && l.status !== "cancelado").length;
@@ -74,8 +74,10 @@ async function getData(leadScope?: string) {
 }
 
 export default async function DashboardPage() {
+  const tenantId = await getTenantId();
+  const db = forTenant(tenantId);
   const leadScope = await getLeadScopeFilter();
-  const data = await getData(leadScope);
+  const data = await getData(db, leadScope);
 
   const kpis = [
     { label: "Leads ativos", value: String(data.leadsAtivos) },
