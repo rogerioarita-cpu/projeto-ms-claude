@@ -55,7 +55,6 @@ export async function PATCH(request: Request, { params }: { params: { id: string
           status: status ?? target.status,
           ...(passwordHash ? { passwordHash } : {}),
         },
-        include: { tenant: true },
       })
     );
 
@@ -64,7 +63,6 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       name: updated.name,
       email: updated.email,
       status: updated.status,
-      tenantName: updated.tenant.name,
     });
   } catch (error) {
     console.error("PATCH /api/plataforma/super-admins/[id]", error);

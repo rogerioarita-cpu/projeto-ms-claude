@@ -4,9 +4,10 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { authOptions } from "@/server/auth";
 import { requireAdminSession } from "@/server/require-admin";
-import { ROLE_VALUES } from "@/lib/role-options";
+import { ROLE_VALUES, ROLE_LABELS } from "@/lib/role-options";
 import { getTenantId, forTenant, handleTenantError } from "@/server/tenant";
 import { withPlatformBypass } from "@/server/tenant-db";
+import { sendWelcomeEmail } from "@/server/mail";
 
 const STATUS_VALUES = ["ativo", "inativo", "bloqueado"] as const;
 
@@ -17,6 +18,7 @@ const createUserSchema = z.object({
   roles: z.array(z.enum(ROLE_VALUES)).min(1, "Selecione ao menos um papel"),
   status: z.enum(STATUS_VALUES).optional(),
   linkedLeadId: z.string().nullable().optional(),
+  sendWelcomeEmail: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -66,7 +68,7 @@ export async function POST(request: Request) {
       const firstError = Object.values(parsed.error.flatten().fieldErrors)[0]?.[0];
       return NextResponse.json({ error: firstError ?? "Dados inválidos." }, { status: 400 });
     }
-    const { name, email, password, roles, status, linkedLeadId } = parsed.data;
+    const { name, email, password, roles, status, linkedLeadId, sendWelcomeEmail: shouldSendEmail } = parsed.data;
 
     if (roles.includes("lead_cliente") && !linkedLeadId) {
       return NextResponse.json({ error: "Selecione o Lead/Cliente vinculado para o perfil Lead/Cliente." }, { status: 400 });
@@ -102,6 +104,17 @@ export async function POST(request: Request) {
       },
       include: { roles: true },
     });
+
+    // E-mail de boas-vindas (best-effort): nunca bloqueia a criação do usuário
+    // se o envio falhar ou não estiver configurado (ver src/server/mail.ts).
+    if (shouldSendEmail) {
+      await sendWelcomeEmail({
+        name: user.name,
+        email: user.email,
+        roleLabels: user.roles.map((r) => ROLE_LABELS[r.role] ?? r.role),
+        password: password || null,
+      });
+    }
 
     return NextResponse.json(
       {

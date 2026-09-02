@@ -27,6 +27,7 @@ export function UserForm({ initial }: { initial?: Initial }) {
   const [status, setStatus] = useState<StatusValue>(initial?.status ?? "ativo");
   const [linkedLeadId, setLinkedLeadId] = useState(initial?.linkedLeadId ?? "");
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -67,7 +68,15 @@ export function UserForm({ initial }: { initial?: Initial }) {
     const res = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password: password || undefined, roles, status, linkedLeadId: needsLinkedLead ? linkedLeadId : null }),
+      body: JSON.stringify({
+        name,
+        email,
+        password: password || undefined,
+        roles,
+        status,
+        linkedLeadId: needsLinkedLead ? linkedLeadId : null,
+        ...(isEdit ? {} : { sendWelcomeEmail }),
+      }),
     });
 
     setLoading(false);
@@ -155,6 +164,13 @@ export function UserForm({ initial }: { initial?: Initial }) {
           </select>
           <p className="mt-1 text-xs text-muted">Obrigatório para o perfil Lead/Cliente — restringe o acesso apenas à consulta dos dados desse Lead/Cliente.</p>
         </div>
+      )}
+
+      {!isEdit && (
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={sendWelcomeEmail} onChange={(e) => setSendWelcomeEmail(e.target.checked)} />
+          Enviar e-mail de boas-vindas ao usuário (com usuário, perfil e senha)
+        </label>
       )}
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}

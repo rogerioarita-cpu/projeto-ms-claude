@@ -4,6 +4,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { withPlatformBypass } from "@/server/tenant-db";
 import { requirePlatformSuperAdminSession } from "@/server/require-platform-admin";
+import { ROLE_LABELS } from "@/lib/role-options";
+import { sendWelcomeEmail } from "@/server/mail";
 
 const createTenantSchema = z.object({
   tenantName: z.string().min(1, "O nome da organização é obrigatório"),
@@ -14,6 +16,7 @@ const createTenantSchema = z.object({
   adminName: z.string().min(1, "O nome do administrador é obrigatório"),
   adminEmail: z.string().email("E-mail inválido"),
   adminPassword: z.string().min(8, "A senha precisa ter ao menos 8 caracteres").optional().or(z.literal("")),
+  sendWelcomeEmail: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -45,7 +48,7 @@ export async function POST(request: Request) {
       const firstError = Object.values(parsed.error.flatten().fieldErrors)[0]?.[0];
       return NextResponse.json({ error: firstError ?? "Dados inválidos." }, { status: 400 });
     }
-    const { tenantName, tenantSlug, adminName, adminEmail, adminPassword } = parsed.data;
+    const { tenantName, tenantSlug, adminName, adminEmail, adminPassword, sendWelcomeEmail: shouldSendEmail } = parsed.data;
 
     const existingSlug = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
     if (existingSlug) {
@@ -80,6 +83,17 @@ export async function POST(request: Request) {
       });
       return { tenant, admin };
     });
+
+    // E-mail de boas-vindas (best-effort) para o admin recém-criado.
+    if (shouldSendEmail) {
+      await sendWelcomeEmail({
+        name: result.admin.name,
+        email: result.admin.email,
+        roleLabels: [ROLE_LABELS.admin],
+        password: adminPassword || null,
+        tenantName: result.tenant.name,
+      });
+    }
 
     return NextResponse.json(
       {

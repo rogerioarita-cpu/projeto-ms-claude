@@ -29,7 +29,7 @@ const STATUS_COLORS: Record<TenantStatus, string> = {
 
 type AdminStatus = "ativo" | "inativo" | "bloqueado";
 
-type SuperAdmin = { id: string; name: string | null; email: string; status: AdminStatus; tenantName: string };
+type SuperAdmin = { id: string; name: string | null; email: string; status: AdminStatus };
 
 const ADMIN_STATUS_LABELS: Record<AdminStatus, string> = {
   ativo: "Ativo",
@@ -38,7 +38,7 @@ const ADMIN_STATUS_LABELS: Record<AdminStatus, string> = {
 };
 
 const emptyAdminEditForm = { name: "", email: "", password: "", status: "ativo" as AdminStatus };
-const emptyNewAdminForm = { name: "", email: "", password: "" };
+const emptyNewAdminForm = { name: "", email: "", password: "", sendWelcomeEmail: true };
 
 const emptyForm = {
   tenantName: "",
@@ -46,7 +46,10 @@ const emptyForm = {
   adminName: "",
   adminEmail: "",
   adminPassword: "",
+  sendWelcomeEmail: true,
 };
+
+const emptyTenantEditForm = { name: "", slug: "" };
 
 function slugify(value: string) {
   return value
@@ -72,6 +75,9 @@ export default function PlataformaTenantsPage() {
   const [newAdminForm, setNewAdminForm] = useState(emptyNewAdminForm);
   const [showNewAdminForm, setShowNewAdminForm] = useState(false);
   const [creatingAdmin, setCreatingAdmin] = useState(false);
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [tenantEditForm, setTenantEditForm] = useState(emptyTenantEditForm);
+  const [savingTenant, setSavingTenant] = useState(false);
 
   async function loadAdmins() {
     const res = await fetch("/api/plataforma/super-admins", { cache: "no-store" });
@@ -215,6 +221,38 @@ export default function PlataformaTenantsPage() {
     }
   }
 
+  function startEditTenant(tenant: Tenant) {
+    setEditingTenant(tenant);
+    setTenantEditForm({ name: tenant.name, slug: tenant.slug });
+  }
+
+  function cancelEditTenant() {
+    setEditingTenant(null);
+    setTenantEditForm(emptyTenantEditForm);
+  }
+
+  async function saveTenant(e: FormEvent) {
+    e.preventDefault();
+    if (!editingTenant) return;
+    setError("");
+    setSavingTenant(true);
+    try {
+      const res = await fetch(`/api/plataforma/tenants/${editingTenant.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: tenantEditForm.name, slug: tenantEditForm.slug }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Não foi possível salvar as alterações.");
+      cancelEditTenant();
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível salvar as alterações.");
+    } finally {
+      setSavingTenant(false);
+    }
+  }
+
   if (forbidden) {
     return (
       <AppShell title="Cadastro de Organizações" subtitle="Provisionamento de novas organizações na plataforma.">
@@ -293,6 +331,14 @@ export default function PlataformaTenantsPage() {
                 placeholder="Se em branco, o administrador cadastra no primeiro acesso"
               />
             </label>
+            <label className="flex items-center gap-2 text-sm md:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.sendWelcomeEmail}
+                onChange={(e) => setForm((f) => ({ ...f, sendWelcomeEmail: e.target.checked }))}
+              />
+              Enviar e-mail de boas-vindas ao administrador (com usuário, perfil e senha)
+            </label>
             <div className="md:col-span-2">
               <button disabled={saving} className="rounded-md bg-navy px-5 py-2 text-sm font-medium text-white disabled:opacity-50">
                 {saving ? "Criando..." : "Criar organização"}
@@ -303,6 +349,40 @@ export default function PlataformaTenantsPage() {
 
         <Card>
           <CardTitle className="text-base">{tenants.length} organização(ões)</CardTitle>
+
+          {editingTenant && (
+            <form onSubmit={saveTenant} className="my-4 grid gap-4 rounded-md border border-border p-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <CardTitle className="text-sm">Editando: {editingTenant.name}</CardTitle>
+              </div>
+              <label>
+                <span className="mb-1 block text-sm font-medium">Nome da organização *</span>
+                <input
+                  required
+                  value={tenantEditForm.name}
+                  onChange={(e) => setTenantEditForm((f) => ({ ...f, name: e.target.value }))}
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm font-medium">Identificador (slug) *</span>
+                <input
+                  required
+                  value={tenantEditForm.slug}
+                  onChange={(e) => setTenantEditForm((f) => ({ ...f, slug: slugify(e.target.value) }))}
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                />
+              </label>
+              <div className="flex gap-2 md:col-span-2">
+                <button disabled={savingTenant} className="rounded-md bg-navy px-5 py-2 text-sm font-medium text-white disabled:opacity-50">
+                  {savingTenant ? "Salvando..." : "Salvar alterações"}
+                </button>
+                <button type="button" onClick={cancelEditTenant} className="rounded-md border px-5 py-2 text-sm font-medium">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
           {loading ? (
             <p className="mt-3 text-sm text-muted">Carregando...</p>
           ) : tenants.length === 0 ? (
@@ -331,15 +411,20 @@ export default function PlataformaTenantsPage() {
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[t.status]}`}>{STATUS_LABELS[t.status]}</span>
                       </td>
                       <td className="py-2 pr-4">
-                        {t.status === "ativo" ? (
-                          <button type="button" onClick={() => changeStatus(t, "suspenso")} className="rounded-md border px-3 py-1.5 text-xs">
-                            Suspender
+                        <div className="flex items-center gap-3">
+                          <button type="button" onClick={() => startEditTenant(t)} className="text-xs font-medium text-navy hover:underline">
+                            Editar
                           </button>
-                        ) : (
-                          <button type="button" onClick={() => changeStatus(t, "ativo")} className="rounded-md border px-3 py-1.5 text-xs">
-                            Reativar
-                          </button>
-                        )}
+                          {t.status === "ativo" ? (
+                            <button type="button" onClick={() => changeStatus(t, "suspenso")} className="rounded-md border px-3 py-1.5 text-xs">
+                              Suspender
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => changeStatus(t, "ativo")} className="rounded-md border px-3 py-1.5 text-xs">
+                              Reativar
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -406,6 +491,14 @@ export default function PlataformaTenantsPage() {
                   className="w-full rounded-md border px-3 py-2 text-sm"
                   placeholder="Se em branco, cadastra no primeiro acesso"
                 />
+              </label>
+              <label className="flex items-center gap-2 text-sm md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={newAdminForm.sendWelcomeEmail}
+                  onChange={(e) => setNewAdminForm((f) => ({ ...f, sendWelcomeEmail: e.target.checked }))}
+                />
+                Enviar e-mail de boas-vindas (com usuário, perfil e senha)
               </label>
               <div className="flex gap-2 md:col-span-2">
                 <button disabled={creatingAdmin} className="rounded-md bg-navy px-5 py-2 text-sm font-medium text-white disabled:opacity-50">
@@ -491,7 +584,6 @@ export default function PlataformaTenantsPage() {
                   <tr className="border-b border-border text-left text-xs uppercase text-muted">
                     <th className="py-2 pr-4">Nome</th>
                     <th className="py-2 pr-4">E-mail</th>
-                    <th className="py-2 pr-4">Organização</th>
                     <th className="py-2 pr-4">Status</th>
                     <th className="py-2 pr-4">Ações</th>
                   </tr>
@@ -501,7 +593,6 @@ export default function PlataformaTenantsPage() {
                     <tr key={a.id} className="border-b border-border last:border-0">
                       <td className="py-2 pr-4 font-medium">{a.name ?? "—"}</td>
                       <td className="py-2 pr-4 text-muted">{a.email}</td>
-                      <td className="py-2 pr-4 text-muted">{a.tenantName}</td>
                       <td className="py-2 pr-4 text-muted">{ADMIN_STATUS_LABELS[a.status]}</td>
                       <td className="py-2 pr-4">
                         <div className="flex items-center gap-3">
