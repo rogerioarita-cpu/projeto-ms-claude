@@ -5,10 +5,10 @@ const prisma = new PrismaClient();
 
 async function main() {
   // Usuário admin de demonstração
-  const passwordHash = await bcrypt.hash("trocar-esta-senha", 10);
+  const passwordHash = await bcrypt.hash("Admin@123456", 10);
   const admin = await prisma.user.upsert({
     where: { email: "admin@projeto-ms.local" },
-    update: {},
+    update: { passwordHash },
     create: {
       email: "admin@projeto-ms.local",
       name: "Administrador",
@@ -20,11 +20,11 @@ async function main() {
 
   const analista = await prisma.user.upsert({
     where: { email: "analista@projeto-ms.local" },
-    update: {},
+    update: { passwordHash: await bcrypt.hash("Admin@123456", 10) },
     create: {
       email: "analista@projeto-ms.local",
       name: "Beatriz Fontoura",
-      passwordHash: await bcrypt.hash("trocar-esta-senha", 10),
+      passwordHash: await bcrypt.hash("Admin@123456", 10),
       status: "ativo",
       roles: { create: [{ role: "analista_fiscal" }] },
     },
@@ -165,7 +165,7 @@ async function main() {
     },
   });
 
-  console.log("Seed concluído. Login de demonstração: admin@projeto-ms.local / trocar-esta-senha");
+  console.log("Seed concluído. Login de demonstração: admin@projeto-ms.local / Admin@123456");
 }
 
 main()

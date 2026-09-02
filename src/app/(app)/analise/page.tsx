@@ -2,8 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
-import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { AnaliseCascade } from "@/components/analise/AnaliseCascade";
 
 type Lead = { id: string; companyName: string; isClient?: boolean };
 type UserOption = { id: string; name: string | null; email: string };
@@ -357,67 +357,8 @@ export default function AnaliseFiscalPage() {
 
         {loading ? (
           <p className="text-sm text-muted">Carregando...</p>
-        ) : analises.length === 0 ? (
-          <p className="text-sm text-muted">Nenhuma análise fiscal cadastrada ainda.</p>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {analises.map((a) => {
-              const done = a.checklist.filter((c) => c.done).length;
-              const progress = a.checklist.length ? Math.round((done / a.checklist.length) * 100) : 0;
-              return (
-                <Card key={a.id}>
-                  <div className="mb-2 flex items-start justify-between">
-                    <div>
-                      <p className="font-semibold text-navy">{a.lead?.companyName || "—"}</p>
-                      <p className="text-xs text-muted">{a.thesis}</p>
-                    </div>
-                    <Badge value={a.status} />
-                  </div>
-                  <div className="mb-2 flex flex-wrap gap-1">
-                    <Badge value={a.taxType} />
-                    <span className="text-xs text-muted">{a.periodStart} a {a.periodEnd}</span>
-                  </div>
-                  <p className="text-xs text-muted">Analista: {a.analyst?.name || a.analyst?.email || "Não atribuído"}</p>
-                  {a.diagnosis && <p className="mt-2 text-sm">{a.diagnosis}</p>}
-                  {a.checklist.length > 0 && (
-                    <div className="mt-3">
-                      <div className="mb-1 flex items-center justify-between text-xs text-muted">
-                        <span>Checklist</span>
-                        <span>{done}/{a.checklist.length}</span>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-gray-100">
-                        <div className="h-1.5 rounded-full bg-navy" style={{ width: `${progress}%` }} />
-                      </div>
-                      <ul className="mt-2 space-y-1">
-                        {a.checklist.map((c) => (
-                          <li key={c.id} className="flex items-center gap-2 text-sm">
-                            <input type="checkbox" checked={c.done} onChange={() => toggleChecklistItem(c)} />
-                            <span className={c.done ? "text-muted line-through" : ""}>{c.description}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  <p className="mt-3 text-lg font-bold text-navy">{brl.format(Number(a.estimatedCredit ?? 0))}</p>
-                  {a.approvals.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {a.approvals.map((ap) => (
-                        <Badge key={ap.id} value={ap.status} />
-                      ))}
-                    </div>
-                  )}
-                  <div className="mt-3 flex gap-2">
-                    <button type="button" onClick={() => edit(a)} className="rounded-md border px-3 py-1.5 text-xs">
-                      Editar
-                    </button>
-                    <button type="button" onClick={() => remove(a)} className="rounded-md border border-red-200 px-3 py-1.5 text-xs text-red-700">
-                      Excluir
-                    </button>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+          <AnaliseCascade analises={analises} onEdit={edit} onRemove={remove} onToggleChecklist={toggleChecklistItem} />
         )}
       </div>
     </AppShell>
