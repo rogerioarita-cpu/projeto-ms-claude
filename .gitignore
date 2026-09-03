@@ -12,9 +12,22 @@
 .env
 .env.local
 .env.*.local
+# qualquer .env com sufixo (ex.: .env.vercel, .env.local.vercel, .env.vercel.production)
+.env.*
+!.env.example
+
+# vercel
+/.vercel
 
 # prisma
 /prisma/dev.db
+
+# backups / arquivos temporários
+/backup
+*.dump
+*.old*
+*.bak
+*.backup/
 
 # logs
 npm-debug.log*
