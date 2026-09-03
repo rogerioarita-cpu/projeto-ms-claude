@@ -8,14 +8,20 @@ import { ROLE_VALUES, ROLE_LABELS } from "@/lib/role-options";
 import { getTenantId, forTenant, handleTenantError } from "@/server/tenant";
 import { withPlatformBypass } from "@/server/tenant-db";
 import { sendWelcomeEmail } from "@/server/mail";
+import { requirePlatformSuperAdminSession } from "@/server/require-platform-admin";
 
 const STATUS_VALUES = ["ativo", "inativo", "bloqueado"] as const;
+// "super_admin" fica fora de ROLE_VALUES (não selecionável por um admin comum),
+// mas é aceito aqui — com checagem de permissão logo abaixo — porque a tela de
+// cadastro de usuários também mostra esse papel quando quem preenche já é
+// super-admin (ver src/components/users/UserForm.tsx).
+const ALL_ROLE_VALUES = [...ROLE_VALUES, "super_admin"] as const;
 
 const createUserSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("E-mail inválido"),
   password: z.string().min(8, "A senha precisa ter ao menos 8 caracteres").optional().or(z.literal("")),
-  roles: z.array(z.enum(ROLE_VALUES)).min(1, "Selecione ao menos um papel"),
+  roles: z.array(z.enum(ALL_ROLE_VALUES)).min(1, "Selecione ao menos um papel"),
   status: z.enum(STATUS_VALUES).optional(),
   linkedLeadId: z.string().nullable().optional(),
   sendWelcomeEmail: z.boolean().optional(),
@@ -74,6 +80,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Selecione o Lead/Cliente vinculado para o perfil Lead/Cliente." }, { status: 400 });
     }
 
+    // Só um super-admin pode atribuir o papel "super_admin" a alguém (mesma
+    // regra usada em /api/plataforma/super-admins) — mesmo que ele apareça
+    // como opção nesta tela quando quem preenche já é super-admin.
+    if (roles.includes("super_admin") && !(await requirePlatformSuperAdminSession())) {
+      return NextResponse.json({ error: "Apenas super-administradores podem atribuir o papel Super Administrador." }, { status: 403 });
+    }
+
     // E-mail é único globalmente (não por tenant — ver PRD seção 6.3), então
     // esta checagem usa bypass de RLS de propósito (precisa enxergar todos os tenants).
     const existing = await withPlatformBypass((tx) => tx.user.findUnique({ where: { email } }));
@@ -100,6 +113,7 @@ export async function POST(request: Request) {
         status: status ?? "ativo",
         linkedLeadId: roles.includes("lead_cliente") ? linkedLeadId || null : null,
         tenantId,
+        isPlatformSuperAdmin: roles.includes("super_admin"),
         roles: { create: roles.map((role) => ({ role })) },
       },
       include: { roles: true },

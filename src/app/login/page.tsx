@@ -17,6 +17,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsPassword, setNeedsPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -66,14 +67,29 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Senha</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-navy"
-              placeholder="••••••••"
-            />
+            <div className="relative mt-1">
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-md border border-border px-3 py-2 pr-16 text-sm outline-none focus:border-navy"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute inset-y-0 right-0 px-3 text-xs font-medium text-navy hover:underline"
+                tabIndex={-1}
+              >
+                {showPassword ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+            <p className="mt-1 text-right">
+              <Link href="/esqueci-senha" className="text-xs font-medium text-navy hover:underline">
+                Esqueci minha senha
+              </Link>
+            </p>
           </div>
 
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -96,16 +112,10 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <button
-          onClick={() => signIn("google", { callbackUrl: "/inicio" })}
-          className="mt-3 w-full rounded-md border border-border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Entrar com Google
-        </button>
-
-        <p className="mt-6 text-center text-xs text-muted">
-          Demo: admin@projeto-ms.local / Senha: Admin@123456
-        </p>
+        <div className="mt-6 space-y-1 text-center text-xs text-muted">
+          <p>Demo Super Adm: admin@projeto-ms.local / Senha: Admin@123456</p>
+          <p>Demo: admin1@projeto-ms.local / Senha: Admin@123456</p>
+        </div>
       </div>
     </main>
   );

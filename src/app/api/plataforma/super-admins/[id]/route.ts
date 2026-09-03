@@ -3,6 +3,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { withPlatformBypass } from "@/server/tenant-db";
 import { requirePlatformSuperAdminSession } from "@/server/require-platform-admin";
+import { sendPasswordChangedEmail } from "@/server/mail";
 
 const STATUS_VALUES = ["ativo", "inativo", "bloqueado"] as const;
 
@@ -28,8 +29,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     // Bypass de propósito: um super-admin pode pertencer a um tenant diferente
     // do que o admin logado está acessando no momento (ver seletor de organização).
-    const target = await withPlatformBypass((tx) => tx.user.findUnique({ where: { id: params.id } }));
-    if (!target || !target.isPlatformSuperAdmin) {
+    // Considera tanto o flag quanto o papel "super_admin" (ver nota em GET /api/plataforma/super-admins).
+    const target = await withPlatformBypass((tx) => tx.user.findUnique({ where: { id: params.id }, include: { roles: true } }));
+    const targetIsSuperAdmin = target && (target.isPlatformSuperAdmin || target.roles.some((r) => r.role === "super_admin"));
+    if (!target || !targetIsSuperAdmin) {
       return NextResponse.json({ error: "Super-administrador não encontrado." }, { status: 404 });
     }
 
@@ -53,10 +56,17 @@ export async function PATCH(request: Request, { params }: { params: { id: string
           name,
           email,
           status: status ?? target.status,
+          isPlatformSuperAdmin: true, // reforça a sincronia com o papel "super_admin" a cada edição
           ...(passwordHash ? { passwordHash } : {}),
+          ...(passwordHash && target.passwordResetRequestedAt ? { passwordResetRequestedAt: null } : {}),
         },
       })
     );
+
+    // Fora da transação (best-effort): responde ao solicitante confirmando a alteração.
+    if (passwordHash && target.passwordResetRequestedAt) {
+      await sendPasswordChangedEmail({ name, email });
+    }
 
     return NextResponse.json({
       id: updated.id,
@@ -80,17 +90,28 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
       return NextResponse.json({ error: "Você não pode remover seu próprio acesso de super-administrador." }, { status: 400 });
     }
 
-    const totalAdmins = await withPlatformBypass((tx) => tx.user.count({ where: { isPlatformSuperAdmin: true } }));
+    const totalAdmins = await withPlatformBypass((tx) =>
+      tx.user.count({ where: { OR: [{ isPlatformSuperAdmin: true }, { roles: { some: { role: "super_admin" } } }] } })
+    );
     if (totalAdmins <= 1) {
       return NextResponse.json({ error: "Não é possível remover o último super-administrador da plataforma." }, { status: 400 });
     }
 
-    const existing = await withPlatformBypass((tx) => tx.user.findUnique({ where: { id: params.id } }));
-    if (!existing || !existing.isPlatformSuperAdmin) {
+    const existing = await withPlatformBypass((tx) => tx.user.findUnique({ where: { id: params.id }, include: { roles: true } }));
+    const existingIsSuperAdmin = existing && (existing.isPlatformSuperAdmin || existing.roles.some((r) => r.role === "super_admin"));
+    if (!existing || !existingIsSuperAdmin) {
       return NextResponse.json({ error: "Super-administrador não encontrado." }, { status: 404 });
     }
 
-    await withPlatformBypass((tx) => tx.user.update({ where: { id: params.id }, data: { isPlatformSuperAdmin: false } }));
+    await withPlatformBypass((tx) =>
+      tx.user.update({
+        where: { id: params.id },
+        data: {
+          isPlatformSuperAdmin: false,
+          roles: { deleteMany: { role: "super_admin" } },
+        },
+      })
+    );
 
     return NextResponse.json({ ok: true });
   } catch (error) {

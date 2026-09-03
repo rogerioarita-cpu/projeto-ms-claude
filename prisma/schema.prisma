@@ -60,6 +60,10 @@ enum AppRole {
   comercial
   aprovador
   lead_cliente
+  // Papel de plataforma (fora do RBAC de um tenant específico) — indica que o
+  // usuário é super-admin (isPlatformSuperAdmin), usado para controlar a
+  // visibilidade de telas como "Cadastro de Organizações".
+  super_admin
 }
 
 enum UserStatus {
@@ -87,6 +91,10 @@ model User {
   // específico — não é um AppRole. Só um super-admin da plataforma pode criar
   // novos tenants e seus primeiros administradores.
   isPlatformSuperAdmin Boolean @default(false)
+  // Marca quando o usuário pediu "Esqueci minha senha" — usado para saber, ao
+  // salvar uma nova senha para ele, se deve responder por e-mail confirmando
+  // a alteração. Fica null de novo assim que a confirmação é enviada.
+  passwordResetRequestedAt DateTime?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 

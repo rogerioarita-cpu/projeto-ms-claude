@@ -47,6 +47,7 @@ const emptyForm = {
   adminEmail: "",
   adminPassword: "",
   sendWelcomeEmail: true,
+  emailBody: "",
 };
 
 const emptyTenantEditForm = { name: "", slug: "" };
@@ -60,6 +61,43 @@ function slugify(value: string) {
     .replace(/(^-|-$)/g, "");
 }
 
+// Mesma lógica (em texto simples) usada no servidor para o corpo padrão do
+// e-mail de boas-vindas (ver src/server/mail.ts) — serve de ponto de partida
+// editável na tela; {{LOGIN_URL}} é trocado pelo link real de login no envio.
+function buildDefaultEmailBody({
+  adminName,
+  adminEmail,
+  tenantName,
+  adminPassword,
+}: {
+  adminName: string;
+  adminEmail: string;
+  tenantName: string;
+  adminPassword: string;
+}) {
+  const greeting = adminName || adminEmail || "administrador(a)";
+  const org = tenantName ? ` na organização ${tenantName}` : "";
+  const passwordLine = adminPassword
+    ? `Senha: ${adminPassword}\n\nRecomendamos alterar sua senha após o primeiro acesso.`
+    : "Senha: ainda não definida — acesse o link abaixo e cadastre sua senha antes do primeiro login.";
+
+  return `Olá, ${greeting},
+
+Sua conta no sistema de Análise Fiscal e Recuperação de Créditos (Projeto MS) foi criada com sucesso${org}.
+
+Seus dados de acesso:
+Usuário (e-mail): ${adminEmail || "—"}
+Perfil(is): Administrador
+${passwordLine}
+
+Acesse o sistema em: {{LOGIN_URL}}
+
+Qualquer dúvida, fale com o administrador da sua organização.
+
+Atenciosamente,
+Equipe Projeto MS`;
+}
+
 export default function PlataformaTenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +106,7 @@ export default function PlataformaTenantsPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [slugTouched, setSlugTouched] = useState(false);
+  const [emailBodyTouched, setEmailBodyTouched] = useState(false);
   const [admins, setAdmins] = useState<SuperAdmin[]>([]);
   const [editingAdmin, setEditingAdmin] = useState<SuperAdmin | null>(null);
   const [adminEditForm, setAdminEditForm] = useState(emptyAdminEditForm);

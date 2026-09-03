@@ -2,28 +2,34 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { ROLE_VALUES, ROLE_LABELS, ROLE_DESCRIPTIONS, type RoleValue } from "@/lib/role-options";
 
 type Lead = { id: string; companyName: string };
 type StatusValue = "ativo" | "inativo" | "bloqueado";
+// Papel exibido só para quem já é super-admin — não faz parte de ROLE_VALUES
+// (lista "normal"), pois não é selecionável por um admin comum.
+type SelectableRole = RoleValue | "super_admin";
 
 type Initial = {
   id?: string;
   name: string;
   email: string;
-  roles: RoleValue[];
+  roles: string[];
   status?: StatusValue;
   linkedLeadId?: string | null;
 };
 
 export function UserForm({ initial }: { initial?: Initial }) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const viewerIsSuperAdmin = (((session?.user as { roles?: string[] } | undefined)?.roles ?? []) as string[]).includes("super_admin");
   const isEdit = Boolean(initial?.id);
 
   const [name, setName] = useState(initial?.name ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [password, setPassword] = useState("");
-  const [roles, setRoles] = useState<RoleValue[]>(initial?.roles ?? []);
+  const [roles, setRoles] = useState<SelectableRole[]>((initial?.roles ?? []) as SelectableRole[]);
   const [status, setStatus] = useState<StatusValue>(initial?.status ?? "ativo");
   const [linkedLeadId, setLinkedLeadId] = useState(initial?.linkedLeadId ?? "");
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -38,9 +44,13 @@ export function UserForm({ initial }: { initial?: Initial }) {
       .catch(() => setLeads([]));
   }, []);
 
-  function toggleRole(role: RoleValue) {
+  function toggleRole(role: SelectableRole) {
     setRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
   }
+
+  // "Super Administrador" só é exibido na lista de papéis se quem está preenchendo
+  // o formulário já for, ele mesmo, super-admin de plataforma.
+  const visibleRoles: SelectableRole[] = viewerIsSuperAdmin ? [...ROLE_VALUES, "super_admin"] : [...ROLE_VALUES];
 
   const needsLinkedLead = roles.includes("lead_cliente");
 
@@ -92,7 +102,7 @@ export function UserForm({ initial }: { initial?: Initial }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
+    <form onSubmit={handleSubmit} className="max-w-2xl space-y-4">
       <div>
         <label className="block text-sm font-medium text-gray-700">Nome</label>
         <input
@@ -138,8 +148,8 @@ export function UserForm({ initial }: { initial?: Initial }) {
 
       <div>
         <label className="block text-sm font-medium text-gray-700">Papéis</label>
-        <div className="mt-2 space-y-2">
-          {ROLE_VALUES.map((role) => (
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {visibleRoles.map((role) => (
             <label key={role} className="flex items-start gap-2 rounded-md border border-border px-3 py-2 text-sm">
               <input type="checkbox" className="mt-0.5" checked={roles.includes(role)} onChange={() => toggleRole(role)} />
               <span>

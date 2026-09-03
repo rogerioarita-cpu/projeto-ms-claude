@@ -54,7 +54,8 @@ export async function getTenantId(): Promise<string> {
   if (!session?.user) throw new TenantMissingError();
 
   const isPlatformSuperAdmin = (session.user as { isPlatformSuperAdmin?: boolean }).isPlatformSuperAdmin;
-  if (isPlatformSuperAdmin) {
+  const roles = ((session.user as { roles?: string[] }).roles ?? []) as string[];
+  if (isPlatformSuperAdmin || roles.includes("super_admin")) {
     return resolveActiveTenantId();
   }
 

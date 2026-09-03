@@ -22,10 +22,13 @@ export default async function UsuariosPage({ searchParams }: { searchParams?: { 
 
   const tenantId = await getTenantId();
   const db = forTenant(tenantId);
-  const allUsers = await db.user.findMany({
+  const fetchedUsers = await db.user.findMany({
     orderBy: { createdAt: "desc" },
     include: { roles: true, linkedLead: true },
   });
+  // Super-admins de plataforma não aparecem nesta tela — são gerenciados na
+  // tela dedicada "Cadastro de Organizações" (seção "Super-administradores").
+  const allUsers = fetchedUsers.filter((u) => !u.roles.some((r) => r.role === "super_admin"));
 
   const users = allUsers.filter((u) => {
     const matchesRole = !roleFilter || u.roles.some((r) => r.role === roleFilter);

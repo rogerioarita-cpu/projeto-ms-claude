@@ -17,6 +17,7 @@ const createTenantSchema = z.object({
   adminEmail: z.string().email("E-mail inválido"),
   adminPassword: z.string().min(8, "A senha precisa ter ao menos 8 caracteres").optional().or(z.literal("")),
   sendWelcomeEmail: z.boolean().optional(),
+  emailBody: z.string().optional(),
 });
 
 export async function GET() {
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
       const firstError = Object.values(parsed.error.flatten().fieldErrors)[0]?.[0];
       return NextResponse.json({ error: firstError ?? "Dados inválidos." }, { status: 400 });
     }
-    const { tenantName, tenantSlug, adminName, adminEmail, adminPassword, sendWelcomeEmail: shouldSendEmail } = parsed.data;
+    const { tenantName, tenantSlug, adminName, adminEmail, adminPassword, sendWelcomeEmail: shouldSendEmail, emailBody } = parsed.data;
 
     const existingSlug = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
     if (existingSlug) {
@@ -92,6 +93,7 @@ export async function POST(request: Request) {
         roleLabels: [ROLE_LABELS.admin],
         password: adminPassword || null,
         tenantName: result.tenant.name,
+        customBody: emailBody || null,
       });
     }
 

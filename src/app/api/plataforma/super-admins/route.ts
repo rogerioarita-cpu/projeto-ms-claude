@@ -14,9 +14,15 @@ export async function GET() {
     // Bypass de propósito: super-admins podem existir em qualquer tenant —
     // esta listagem é, por natureza, cross-tenant. O super-admin em si não
     // fica "vinculado" a nenhuma organização (não exibimos empresa aqui).
+    // Considera tanto o flag isPlatformSuperAdmin quanto o papel "super_admin"
+    // (RBAC) — os dois deveriam estar sempre sincronizados, mas esta busca
+    // usa OR de propósito para não esconder ninguém caso fiquem dessincronizados
+    // (ex.: papel atribuído manualmente direto no banco, sem passar pelo flag).
     const admins = await withPlatformBypass((tx) =>
       tx.user.findMany({
-        where: { isPlatformSuperAdmin: true },
+        where: {
+          OR: [{ isPlatformSuperAdmin: true }, { roles: { some: { role: "super_admin" } } }],
+        },
         orderBy: { createdAt: "asc" },
       })
     );
@@ -41,7 +47,7 @@ export async function POST(request: Request) {
 
     if (!email) return NextResponse.json({ error: "Informe o e-mail." }, { status: 400 });
 
-    const existing = await withPlatformBypass((tx) => tx.user.findUnique({ where: { email } }));
+    const existing = await withPlatformBypass((tx) => tx.user.findUnique({ where: { email }, include: { roles: true } }));
 
     // Usuário já existe em algum tenant: apenas promove (mesmo comportamento de antes).
     // Não é uma "criação" nova, então não dispara e-mail de boas-vindas aqui.
@@ -49,7 +55,18 @@ export async function POST(request: Request) {
       if (existing.isPlatformSuperAdmin) {
         return NextResponse.json({ error: "Este usuário já é super-administrador." }, { status: 409 });
       }
-      const updated = await withPlatformBypass((tx) => tx.user.update({ where: { id: existing.id }, data: { isPlatformSuperAdmin: true } }));
+      const alreadyHasRole = existing.roles.some((r) => r.role === "super_admin");
+      const updated = await withPlatformBypass((tx) =>
+        tx.user.update({
+          where: { id: existing.id },
+          data: {
+            isPlatformSuperAdmin: true,
+            // Garante o papel "super_admin" no RBAC (usado pelo menu), mesmo
+            // que o usuário já tivesse outros papéis antes da promoção.
+            ...(alreadyHasRole ? {} : { roles: { create: [{ role: "super_admin" }] } }),
+          },
+        })
+      );
       return NextResponse.json({ id: updated.id, name: updated.name, email: updated.email }, { status: 201 });
     }
 
@@ -78,7 +95,7 @@ export async function POST(request: Request) {
           status: "ativo",
           tenantId,
           isPlatformSuperAdmin: true,
-          roles: { create: [{ role: "admin" }] },
+          roles: { create: [{ role: "admin" }, { role: "super_admin" }] },
         },
       })
     );

@@ -7,7 +7,8 @@ type Tenant = { id: string; name: string; createdAt: string };
 
 export function SidebarTenantSwitcher() {
   const { data: session } = useSession();
-  const isPlatformSuperAdmin = (session?.user as { isPlatformSuperAdmin?: boolean } | undefined)?.isPlatformSuperAdmin;
+  const roles = ((session?.user as { roles?: string[] } | undefined)?.roles ?? []) as string[];
+  const isPlatformSuperAdmin = roles.includes("super_admin");
   const tenantName = (session?.user as { tenantName?: string | null } | undefined)?.tenantName;
 
   const [tenants, setTenants] = useState<Tenant[] | null>(null);

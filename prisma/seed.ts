@@ -26,6 +26,14 @@ async function main() {
     },
   });
 
+  // Garante o papel "super_admin" (RBAC) em sincronia com o flag isPlatformSuperAdmin,
+  // inclusive ao reexecutar o seed sobre um usuário já existente.
+  await prisma.userRole.upsert({
+    where: { userId_role: { userId: admin.id, role: "super_admin" } },
+    update: {},
+    create: { userId: admin.id, role: "super_admin" },
+  });
+
   const analista = await prisma.user.upsert({
     where: { email: "analista@projeto-ms.local" },
     update: { passwordHash: await bcrypt.hash("Admin@123456", 10) },

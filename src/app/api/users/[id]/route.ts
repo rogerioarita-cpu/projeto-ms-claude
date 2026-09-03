@@ -2,17 +2,21 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { requireAdminSession } from "@/server/require-admin";
+import { requirePlatformSuperAdminSession } from "@/server/require-platform-admin";
 import { ROLE_VALUES } from "@/lib/role-options";
 import { getTenantId, forTenant, handleTenantError } from "@/server/tenant";
 import { withPlatformBypass } from "@/server/tenant-db";
+import { sendPasswordChangedEmail } from "@/server/mail";
 
 const STATUS_VALUES = ["ativo", "inativo", "bloqueado"] as const;
+// Ver nota equivalente em /api/users/route.ts.
+const ALL_ROLE_VALUES = [...ROLE_VALUES, "super_admin"] as const;
 
 const updateUserSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("E-mail inválido"),
   password: z.string().min(8).optional().or(z.literal("")),
-  roles: z.array(z.enum(ROLE_VALUES)).min(1, "Selecione ao menos um papel"),
+  roles: z.array(z.enum(ALL_ROLE_VALUES)).min(1, "Selecione ao menos um papel"),
   status: z.enum(STATUS_VALUES).optional(),
   linkedLeadId: z.string().nullable().optional(),
 });
@@ -92,6 +96,25 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       }
     }
 
+    // Mesmas proteções usadas em /api/plataforma/super-admins: só um
+    // super-admin pode atribuir/manter esse papel; não é permitido remover o
+    // acesso de si mesmo por aqui, nem deixar a plataforma sem nenhum super-admin.
+    const willBeSuperAdmin = roles.includes("super_admin");
+    if (willBeSuperAdmin !== target.isPlatformSuperAdmin) {
+      if (!(await requirePlatformSuperAdminSession())) {
+        return NextResponse.json({ error: "Apenas super-administradores podem alterar o papel Super Administrador." }, { status: 403 });
+      }
+      if (target.isPlatformSuperAdmin && !willBeSuperAdmin) {
+        if (currentUserId === params.id) {
+          return NextResponse.json({ error: "Você não pode remover seu próprio acesso de super-administrador." }, { status: 400 });
+        }
+        const totalAdmins = await withPlatformBypass((tx) => tx.user.count({ where: { isPlatformSuperAdmin: true } }));
+        if (totalAdmins <= 1) {
+          return NextResponse.json({ error: "Não é possível remover o último super-administrador da plataforma." }, { status: 400 });
+        }
+      }
+    }
+
     await db.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: params.id },
@@ -100,7 +123,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
           email,
           status: status ?? target.status,
           linkedLeadId: roles.includes("lead_cliente") ? linkedLeadId || null : null,
+          isPlatformSuperAdmin: willBeSuperAdmin,
           ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
+          // "Esqueci minha senha": se essa era uma senha pendente de redefinição,
+          // limpa a marca — a confirmação por e-mail é enviada logo abaixo.
+          ...(password && target.passwordResetRequestedAt ? { passwordResetRequestedAt: null } : {}),
         },
       });
 
@@ -109,6 +136,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         data: roles.map((role) => ({ userId: params.id, role })),
       });
     });
+
+    // Fora da transação (best-effort, não deve bloquear a resposta): responde ao
+    // solicitante confirmando que a alteração foi realizada.
+    if (password && target.passwordResetRequestedAt) {
+      await sendPasswordChangedEmail({ name, email });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

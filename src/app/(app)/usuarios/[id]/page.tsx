@@ -3,7 +3,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
 import { UserForm } from "@/components/users/UserForm";
 import { requireAdminSession } from "@/server/require-admin";
-import type { RoleValue } from "@/lib/role-options";
 import { getTenantId, forTenant } from "@/server/tenant";
 
 export default async function EditarUsuarioPage({ params }: { params: { id: string } }) {
@@ -26,7 +25,7 @@ export default async function EditarUsuarioPage({ params }: { params: { id: stri
             id: user.id,
             name: user.name ?? "",
             email: user.email,
-            roles: user.roles.map((r) => r.role as RoleValue),
+            roles: user.roles.map((r) => r.role),
             status: user.status,
             linkedLeadId: user.linkedLeadId,
           }}
