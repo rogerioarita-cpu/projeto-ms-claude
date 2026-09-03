@@ -140,7 +140,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     // Fora da transação (best-effort, não deve bloquear a resposta): responde ao
     // solicitante confirmando que a alteração foi realizada.
     if (password && target.passwordResetRequestedAt) {
-      await sendPasswordChangedEmail({ name, email });
+      await sendPasswordChangedEmail({ name, email, tenantId });
     }
 
     return NextResponse.json({ ok: true });

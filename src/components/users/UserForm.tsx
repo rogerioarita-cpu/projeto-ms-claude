@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ROLE_VALUES, ROLE_LABELS, ROLE_DESCRIPTIONS, type RoleValue } from "@/lib/role-options";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 type Lead = { id: string; companyName: string };
 type StatusValue = "ativo" | "inativo" | "bloqueado";
@@ -128,8 +129,7 @@ export function UserForm({ initial }: { initial?: Initial }) {
         <label className="block text-sm font-medium text-gray-700">
           {isEdit ? "Nova senha (deixe em branco para manter a atual)" : "Senha (opcional — se em branco, o usuário cadastra no primeiro acesso)"}
         </label>
-        <input
-          type="password"
+        <PasswordInput
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder={isEdit ? "••••••••" : "mínimo 8 caracteres"}

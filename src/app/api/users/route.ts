@@ -127,6 +127,7 @@ export async function POST(request: Request) {
         email: user.email,
         roleLabels: user.roles.map((r) => ROLE_LABELS[r.role] ?? r.role),
         password: password || null,
+        tenantId,
       });
     }
 

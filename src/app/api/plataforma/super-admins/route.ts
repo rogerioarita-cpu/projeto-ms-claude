@@ -106,6 +106,7 @@ export async function POST(request: Request) {
         email: created.email,
         roleLabels: [ROLE_LABELS.admin, "Super-administrador da plataforma"],
         password: password || null,
+        tenantId,
       });
     }
 

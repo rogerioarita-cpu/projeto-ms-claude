@@ -93,6 +93,7 @@ export async function POST(request: Request) {
         roleLabels: [ROLE_LABELS.admin],
         password: adminPassword || null,
         tenantName: result.tenant.name,
+        tenantId: result.tenant.id,
         customBody: emailBody || null,
       });
     }

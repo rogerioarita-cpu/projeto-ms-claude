@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 type TenantStatus = "ativo" | "suspenso" | "cancelado";
 
@@ -362,8 +363,7 @@ export default function PlataformaTenantsPage() {
             </label>
             <label className="md:col-span-2">
               <span className="mb-1 block text-sm font-medium">Senha inicial (opcional)</span>
-              <input
-                type="password"
+              <PasswordInput
                 value={form.adminPassword}
                 onChange={(e) => setForm((f) => ({ ...f, adminPassword: e.target.value }))}
                 className="w-full rounded-md border px-3 py-2 text-sm"
@@ -523,8 +523,7 @@ export default function PlataformaTenantsPage() {
               </label>
               <label className="md:col-span-2">
                 <span className="mb-1 block text-sm font-medium">Senha (opcional)</span>
-                <input
-                  type="password"
+                <PasswordInput
                   value={newAdminForm.password}
                   onChange={(e) => setNewAdminForm((f) => ({ ...f, password: e.target.value }))}
                   className="w-full rounded-md border px-3 py-2 text-sm"
@@ -583,8 +582,7 @@ export default function PlataformaTenantsPage() {
               </label>
               <label>
                 <span className="mb-1 block text-sm font-medium">Nova senha (opcional)</span>
-                <input
-                  type="password"
+                <PasswordInput
                   value={adminEditForm.password}
                   onChange={(e) => setAdminEditForm((f) => ({ ...f, password: e.target.value }))}
                   className="w-full rounded-md border px-3 py-2 text-sm"

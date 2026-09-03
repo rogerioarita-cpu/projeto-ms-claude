@@ -31,6 +31,14 @@ model Tenant {
   slug      String       @unique
   status    TenantStatus @default(ativo)
   plan      String?
+  // SMTP específico desta organização (opcional) — quando preenchido, é usado
+  // em vez da configuração geral do sistema para os e-mails enviados a partir
+  // de dados deste tenant (boas-vindas, esqueci minha senha, etc.).
+  smtpHost  String?
+  smtpPort  Int?
+  smtpUser  String?
+  smtpPass  String?
+  smtpFrom  String?
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
@@ -46,6 +54,21 @@ model Tenant {
   clientFlagLogs  LeadClientFlagLog[]
 
   @@map("tenants")
+}
+
+// Configuração geral do sistema (linha única/singleton) — usada como padrão
+// de SMTP para qualquer tenant que não tenha uma configuração própria (ver
+// Tenant.smtp*). Só o super-admin de plataforma edita isto.
+model SystemSettings {
+  id        String   @id @default(cuid())
+  smtpHost  String?
+  smtpPort  Int?
+  smtpUser  String?
+  smtpPass  String?
+  smtpFrom  String?
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
 }
 
 // ---------------------------------------------------------------------

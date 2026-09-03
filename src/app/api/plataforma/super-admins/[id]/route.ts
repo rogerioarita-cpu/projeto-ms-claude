@@ -65,7 +65,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     // Fora da transação (best-effort): responde ao solicitante confirmando a alteração.
     if (passwordHash && target.passwordResetRequestedAt) {
-      await sendPasswordChangedEmail({ name, email });
+      await sendPasswordChangedEmail({ name, email, tenantId: target.tenantId });
     }
 
     return NextResponse.json({

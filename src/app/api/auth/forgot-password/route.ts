@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     // "com o usuário como remetente": o e-mail do próprio solicitante vai no
     // campo De (ver aviso sobre SPF/DKIM em src/server/mail.ts).
-    await Promise.all(admins.map((admin) => sendMail({ to: admin.email, subject, text, html, from: requester.email })));
+    await Promise.all(admins.map((admin) => sendMail({ to: admin.email, subject, text, html, from: requester.email, tenantId: requester.tenantId })));
 
     return NextResponse.json({ success: true });
   } catch (error) {

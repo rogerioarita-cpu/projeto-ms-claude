@@ -18,6 +18,7 @@ export const config = {
     "/analise/:path*",
     "/aprovacoes/:path*",
     "/plataforma/:path*",
+    "/configuracoes/:path*",
 
     "/api/projetos/:path*",
     "/api/sped/:path*",
@@ -29,5 +30,6 @@ export const config = {
     "/api/aprovacoes/:path*",
     "/api/checklist/:path*",
     "/api/plataforma/:path*",
+    "/api/settings/:path*",
   ],
 };
