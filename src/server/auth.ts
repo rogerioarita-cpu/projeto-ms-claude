@@ -19,39 +19,47 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        // Login acontece ANTES de sabermos o tenant do usuário — por isso usa
-        // bypass de RLS aqui (a única forma de encontrar o usuário para, só
-        // então, descobrir a que tenant ele pertence).
-        const user = await withPlatformBypass((tx) =>
-          tx.user.findUnique({
-            where: { email: credentials.email },
-            include: { roles: true, tenant: true },
-          })
-        );
-        // Mensagens de erro específicas (lidas pela tela de login via `result.error`)
-        // para suportar o fluxo de primeiro acesso e os estados ativo/inativo/bloqueado (PRD 6.1/6.10).
-        if (!user) throw new Error("invalido");
-        if (user.status === "bloqueado") throw new Error("bloqueado");
-        if (user.status === "inativo") throw new Error("inativo");
-        // PRD — Fase 3: um tenant suspenso/cancelado bloqueia o login de todos os seus usuários.
-        if (user.tenant.status !== "ativo") throw new Error("tenant_suspenso");
-        if (!user.passwordHash) throw new Error("sem_senha");
+        try {
+          // Login acontece ANTES de sabermos o tenant do usuário — por isso usa
+          // bypass de RLS aqui (a única forma de encontrar o usuário para, só
+          // então, descobrir a que tenant ele pertence).
+          const user = await withPlatformBypass((tx) =>
+            tx.user.findUnique({
+              where: { email: credentials.email },
+              include: { roles: true, tenant: true },
+            })
+          );
+          // Mensagens de erro específicas (lidas pela tela de login via `result.error`)
+          // para suportar o fluxo de primeiro acesso e os estados ativo/inativo/bloqueado (PRD 6.1/6.10).
+          if (!user) throw new Error("invalido");
+          if (user.status === "bloqueado") throw new Error("bloqueado");
+          if (user.status === "inativo") throw new Error("inativo");
+          // PRD — Fase 3: um tenant suspenso/cancelado bloqueia o login de todos os seus usuários.
+          if (user.tenant.status !== "ativo") throw new Error("tenant_suspenso");
+          if (!user.passwordHash) throw new Error("sem_senha");
 
-        const valid = await bcrypt.compare(credentials.password, user.passwordHash);
-        if (!valid) throw new Error("invalido");
+          const valid = await bcrypt.compare(credentials.password, user.passwordHash);
+          if (!valid) throw new Error("invalido");
 
-        await withPlatformBypass((tx) => tx.user.update({ where: { id: user.id }, data: { lastAccessAt: new Date() } }));
+          await withPlatformBypass((tx) => tx.user.update({ where: { id: user.id }, data: { lastAccessAt: new Date() } }));
 
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          roles: user.roles.map((r) => r.role),
-          linkedLeadId: user.linkedLeadId,
-          tenantId: user.tenantId,
-          tenantName: user.tenant.name,
-          isPlatformSuperAdmin: user.isPlatformSuperAdmin,
-        };
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            roles: user.roles.map((r) => r.role),
+            linkedLeadId: user.linkedLeadId,
+            tenantId: user.tenantId,
+            tenantName: user.tenant.name,
+            isPlatformSuperAdmin: user.isPlatformSuperAdmin,
+          };
+        } catch (error) {
+          // Log explícito: garante que QUALQUER falha (esperada — "invalido" etc. —
+          // ou inesperada — erro de banco, RLS, etc.) apareça no terminal, já que o
+          // NextAuth nem sempre exibe o erro real de authorize() no console.
+          console.error("[auth] Falha no login:", error);
+          throw error;
+        }
       },
     }),
     // Login com Google — só é ativado se as variáveis de ambiente estiverem preenchidas
